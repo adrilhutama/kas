@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KAS REGU 3 — Admin</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.matrix th:first-child, table.matrix td:first-child {
+    position: sticky; left: 0; z-index: 2;
+  }
+  table.matrix thead th:first-child { z-index: 3; }
+  .tgl { cursor: pointer; user-select: none; }
+  .tgl:active { transform: scale(.9); }
+</style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+<div class="max-w-3xl mx-auto px-3 pb-16">
+
+  <header class="py-5 text-center">
+    <h1 class="text-xl font-bold">🔐 ADMIN — KAS REGU 3</h1>
+    <a href="/" class="text-xs text-slate-500 hover:text-emerald-400">← Kembali ke tampilan publik</a>
+  </header>
+
+  <!-- Login barrier -->
+  <div id="login" class="max-w-sm mx-auto bg-slate-800 border border-slate-700 rounded-xl p-5">
+    <h2 class="font-semibold mb-3">Masuk sebagai admin</h2>
+    <input id="pw" type="password" placeholder="Password admin" autocomplete="current-password"
+      class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 mb-3 outline-none focus:border-emerald-500" />
+    <button id="btnLogin" class="w-full bg-emerald-600 hover:bg-emerald-500 rounded-lg py-2 font-semibold">Masuk</button>
+    <p id="loginErr" class="hidden text-rose-400 text-sm mt-2"></p>
+  </div>
+
+  <!-- Dashboard -->
+  <div id="dash" class="hidden">
+    <div class="flex items-center justify-between mb-3">
+      <div class="text-sm text-slate-400">Saldo: <span id="stBalance" class="font-bold text-amber-300">-</span>
+        <span class="text-xs">(<span id="stIncome" class="text-emerald-400"></span> / <span id="stExpense" class="text-rose-400"></span>)</span>
+      </div>
+      <button id="btnLogout" class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-400">Keluar</button>
+    </div>
+    <div id="err" class="hidden mb-3 p-3 rounded-lg bg-rose-900/40 border border-rose-700 text-rose-200 text-sm"></div>
+
+    <!-- Month filter + add month -->
+    <section class="mb-4">
+      <div class="flex flex-wrap gap-1.5 items-center" id="chips"></div>
+      <div class="flex gap-1.5 mt-2">
+        <input id="newMonth" type="month" min="2026-07"
+          class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-sm" />
+        <button id="btnAddMonth" class="text-xs px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600">+ Tampilkan bulan</button>
+      </div>
+    </section>
+
+    <!-- Payment matrix (tap to toggle) -->
+    <section class="mb-6">
+      <h2 class="font-semibold mb-1 text-sm">📋 Kelola Iuran <span class="text-slate-500 font-normal">(ketuk badge untuk ubah)</span></h2>
+      <div class="scroll-x rounded-xl border border-slate-700">
+        <table class="matrix w-full text-sm whitespace-nowrap">
+          <thead><tr id="mHead" class="bg-slate-800 text-slate-300 text-xs"></tr></thead>
+          <tbody id="mBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Expenses -->
+    <section class="mb-6">
+      <h2 class="font-semibold mb-2 text-sm">🧾 Pengeluaran</h2>
+      <form id="fExp" class="bg-slate-800 border border-slate-700 rounded-xl p-3 mb-3 grid gap-2">
+        <input id="expDesc" placeholder="Deskripsi (cth: Beli konsumsi rapat)" required
+          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+        <div class="grid grid-cols-2 gap-2">
+          <input id="expAmt" type="number" min="1" step="500" placeholder="Nominal (Rp)" required
+            class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+          <input id="expDate" type="date" required
+            class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+        </div>
+        <button class="bg-emerald-600 hover:bg-emerald-500 rounded-lg py-2 text-sm font-semibold">+ Tambah pengeluaran</button>
+      </form>
+      <div id="expList" class="space-y-2"></div>
+    </section>
+
+    <!-- Members -->
+    <section>
+      <h2 class="font-semibold mb-2 text-sm">👥 Anggota</h2>
+      <form id="fMem" class="flex gap-2 mb-3">
+        <input id="memName" placeholder="Nama anggota baru" required
+          class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+        <button class="bg-emerald-600 hover:bg-emerald-500 rounded-lg px-4 text-sm font-semibold">+ Tambah</button>
+      </form>
+      <div id="memList" class="flex flex-wrap gap-1.5"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const rp = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+const namaBulan = ym => { const [y,m] = ym.split('-'); return BULAN[Number(m)-1] + ' ' + y; };
+const tglID = iso => { const [y,m,d] = iso.split('-'); return `${Number(d)} ${BULAN[Number(m)-1]} ${y}`; };
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+
+let TOKEN = sessionStorage.getItem('kas_token') || '';
+let ALL_MONTHS = [];
+let ACTIVE = [];
+let DATA = null;
+
+const auth = () => ({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN });
+const showErr = msg => {
+  const e = document.getElementById('err');
+  if (!msg) { e.classList.add('hidden'); return; }
+  e.textContent = msg; e.classList.remove('hidden');
+};
+
+// ---------- Auth ----------
+async function doLogin() {
+  const pw = document.getElementById('pw').value;
+  const le = document.getElementById('loginErr');
+  le.classList.add('hidden');
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || 'Login gagal');
+    TOKEN = d.token;
+    sessionStorage.setItem('kas_token', TOKEN);
+    enter();
+  } catch (e) { le.textContent = e.message; le.classList.remove('hidden'); }
+}
+
+function enter() {
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('dash').classList.remove('hidden');
+  document.getElementById('expDate').value = new Date().toISOString().slice(0, 10);
+  load();
+}
+
+// ---------- Load + render ----------
+async function load() {
+  showErr(null);
+  try {
+    const qs = ACTIVE.length ? '?months=' + ACTIVE.join(',') : '';
+    const r = await fetch('/api/summary' + qs);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    DATA = await r.json();
+    ALL_MONTHS = DATA.available_months || DATA.months || [];
+    if (!ACTIVE.length) ACTIVE = [...(DATA.months || [])];
+    render();
+  } catch (e) { showErr('Gagal memuat: ' + e.message); }
+}
+
+function render() {
+  const d = DATA;
+  document.getElementById('stIncome').textContent = rp(d.total_income);
+  document.getElementById('stExpense').textContent = rp(d.total_expense);
+  document.getElementById('stBalance').textContent = rp(d.current_balance);
+
+  // chips
+  const chips = document.getElementById('chips');
+  chips.innerHTML = '';
+  ALL_MONTHS.forEach(m => {
+    const on = ACTIVE.includes(m);
+    const b = document.createElement('button');
+    b.textContent = namaBulan(m);
+    b.className = 'px-2.5 py-1 rounded-full text-xs border ' +
+      (on ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400');
+    b.onclick = () => {
+      if (on) { if (ACTIVE.length > 1) ACTIVE = ACTIVE.filter(x => x !== m); }
+      else { ACTIVE.push(m); ACTIVE.sort(); }
+      load();
+    };
+    chips.appendChild(b);
+  });
+
+  // matrix
+  document.getElementById('mHead').innerHTML =
+    '<th class="text-left px-3 py-2 bg-slate-800">Anggota</th>' +
+    d.months.map(m => `<th class="px-3 py-2 bg-slate-800 text-center">${namaBulan(m)}</th>`).join('');
+  const body = document.getElementById('mBody');
+  body.innerHTML = '';
+  d.members.forEach((m, i) => {
+    const tr = document.createElement('tr');
+    tr.className = i % 2 ? 'bg-slate-800/40' : 'bg-slate-800/10';
+    const dim = m.is_active ? '' : ' opacity-50';
+    let html = `<td class="px-3 py-2 font-medium bg-slate-900${dim}">${m.name}</td>`;
+    d.months.forEach(mo => {
+      const paid = m.paid[mo];
+      html += `<td class="px-3 py-2 text-center"><span data-mid="${m.id}" data-mo="${mo}" data-paid="${paid ? 1 : 0}" class="tgl inline-block px-2.5 py-0.5 rounded-full text-xs border ` +
+        (paid ? 'bg-emerald-900/60 border-emerald-700 text-emerald-300">✓'
+              : 'bg-slate-900 border-slate-700 text-slate-500">–') + '</span></td>';
+    });
+    tr.innerHTML = html;
+    body.appendChild(tr);
+  });
+  body.querySelectorAll('.tgl').forEach(el => {
+    el.onclick = () => togglePay(Number(el.dataset.mid), el.dataset.mo, el.dataset.paid !== '1');
+  });
+
+  // expenses
+  const ex = document.getElementById('expList');
+  ex.innerHTML = d.expenses.length ? '' : '<div class="text-slate-500 text-sm">Belum ada pengeluaran.</div>';
+  d.expenses.forEach(e => {
+    const div = document.createElement('div');
+    div.className = 'bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 flex justify-between items-center gap-2';
+    div.innerHTML = `<div><div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500">${tglID(e.expense_date)} &bull; ${rp(e.amount)}</div></div>`;
+    const del = document.createElement('button');
+    del.textContent = '🗑';
+    del.className = 'px-2 py-1 rounded-lg bg-rose-900/40 border border-rose-800 text-sm';
+    del.onclick = async () => {
+      if (!confirm(`Hapus pengeluaran "${e.description}" (${rp(e.amount)})?`)) return;
+      const r = await fetch('/api/expenses/' + e.id, { method: 'DELETE', headers: auth() });
+      if (r.status === 401) return logout();
+      if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menghapus.'); }
+      load();
+    };
+    div.appendChild(del);
+    ex.appendChild(div);
+  });
+
+  // members
+  const ml = document.getElementById('memList');
+  ml.innerHTML = '';
+  d.members.forEach(m => {
+    const b = document.createElement('button');
+    b.className = 'px-2.5 py-1 rounded-full text-xs border ' +
+      (m.is_active ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-slate-900 border-slate-800 text-slate-500 line-through');
+    b.textContent = (m.is_active ? '✓ ' : '') + m.name;
+    b.title = m.is_active ? 'Ketuk untuk nonaktifkan' : 'Ketuk untuk aktifkan';
+    b.onclick = async () => {
+      if (!confirm((m.is_active ? 'Nonaktifkan ' : 'Aktifkan kembali ') + m.name + '?')) return;
+      const r = await fetch('/api/members', {
+        method: 'POST', headers: auth(),
+        body: JSON.stringify({ id: m.id, is_active: m.is_active ? 0 : 1 })
+      });
+      if (r.status === 401) return logout();
+      load();
+    };
+    ml.appendChild(b);
+  });
+}
+
+// ---------- Actions ----------
+async function togglePay(member_id, month_period, status) {
+  showErr(null);
+  const r = await fetch('/api/payments/toggle', {
+    method: 'POST', headers: auth(),
+    body: JSON.stringify({ member_id, month_period, status })
+  });
+  if (r.status === 401) return logout();
+  if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menyimpan.'); }
+  // instant UI flip, then re-sync
+  const el = document.querySelector(`.tgl[data-mid="${member_id}"][data-mo="${month_period}"]`);
+  if (el) {
+    el.dataset.paid = status ? '1' : '0';
+    el.className = 'tgl inline-block px-2.5 py-0.5 rounded-full text-xs border ' +
+      (status ? 'bg-emerald-900/60 border-emerald-700 text-emerald-300">✓'
+              : 'bg-slate-900 border-slate-700 text-slate-500">–');
+    el.textContent = status ? '✓' : '–';
+  }
+  load();
+}
+
+function logout() {
+  TOKEN = ''; sessionStorage.removeItem('kas_token');
+  document.getElementById('dash').classList.add('hidden');
+  document.getElementById('login').classList.remove('hidden');
+}
+
+// ---------- Events ----------
+document.getElementById('btnLogin').onclick = doLogin;
+document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+document.getElementById('btnLogout').onclick = logout;
+
+document.getElementById('btnAddMonth').onclick = () => {
+  const v = document.getElementById('newMonth').value.trim();
+  if (!MONTH_RE.test(v)) return showErr('Pilih bulan yang valid.');
+  if (!ALL_MONTHS.includes(v)) ALL_MONTHS.push(v);
+  if (!ACTIVE.includes(v)) ACTIVE.push(v);
+  ACTIVE.sort();
+  load();
+};
+
+document.getElementById('fExp').onsubmit = async e => {
+  e.preventDefault();
+  showErr(null);
+  const r = await fetch('/api/expenses', {
+    method: 'POST', headers: auth(),
+    body: JSON.stringify({
+      description: document.getElementById('expDesc').value.trim(),
+      amount: Number(document.getElementById('expAmt').value),
+      expense_date: document.getElementById('expDate').value
+    })
+  });
+  if (r.status === 401) return logout();
+  if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menambah.'); }
+  document.getElementById('expDesc').value = '';
+  document.getElementById('expAmt').value = '';
+  load();
+};
+
+document.getElementById('fMem').onsubmit = async e => {
+  e.preventDefault();
+  showErr(null);
+  const r = await fetch('/api/members', {
+    method: 'POST', headers: auth(),
+    body: JSON.stringify({ name: document.getElementById('memName').value })
+  });
+  if (r.status === 401) return logout();
+  if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menambah.'); }
+  document.getElementById('memName').value = '';
+  load();
+};
+
+if (TOKEN) enter();
+</script>
+</body>
+</html>

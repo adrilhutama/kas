@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KAS REGU 3 — Kas Tim</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { -webkit-tap-highlight-color: transparent; }
+  .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  table.matrix th:first-child, table.matrix td:first-child {
+    position: sticky; left: 0; z-index: 2;
+  }
+  table.matrix thead th:first-child { z-index: 3; }
+</style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+<div class="max-w-3xl mx-auto px-3 pb-16">
+
+  <!-- Header -->
+  <header class="py-5 text-center">
+    <div class="text-3xl mb-1">💰</div>
+    <h1 class="text-xl font-bold tracking-wide">KAS REGU 3</h1>
+    <p class="text-slate-400 text-sm">Iuran Rp 10.000 / orang / bulan &bull; sejak Juli 2026</p>
+    <a href="/admin.html" class="inline-block mt-2 text-xs text-slate-500 hover:text-emerald-400">🔐 Admin</a>
+  </header>
+
+  <!-- Error / loading -->
+  <div id="err" class="hidden mb-3 p-3 rounded-lg bg-rose-900/40 border border-rose-700 text-rose-200 text-sm"></div>
+  <div id="loading" class="text-center text-slate-400 py-10">Memuat data kas…</div>
+
+  <div id="app" class="hidden">
+    <!-- Stat cards -->
+    <section class="grid grid-cols-3 gap-2 mb-4">
+      <div class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+        <div class="text-[11px] text-slate-400 uppercase">Masuk</div>
+        <div id="stIncome" class="font-bold text-emerald-400 text-sm sm:text-lg">-</div>
+      </div>
+      <div class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+        <div class="text-[11px] text-slate-400 uppercase">Keluar</div>
+        <div id="stExpense" class="font-bold text-rose-400 text-sm sm:text-lg">-</div>
+      </div>
+      <div class="bg-slate-800 rounded-xl p-3 border border-slate-700">
+        <div class="text-[11px] text-slate-400 uppercase">Saldo</div>
+        <div id="stBalance" class="font-bold text-amber-300 text-sm sm:text-lg">-</div>
+      </div>
+    </section>
+
+    <!-- Month filter -->
+    <section class="mb-4">
+      <div class="text-xs text-slate-400 mb-1.5">Periode ditampilkan:</div>
+      <div id="chips" class="flex flex-wrap gap-1.5"></div>
+    </section>
+
+    <!-- Per-month mini stats -->
+    <section id="perMonth" class="flex flex-wrap gap-1.5 mb-4 text-xs"></section>
+
+    <!-- Matrix -->
+    <section class="mb-6">
+      <h2 class="font-semibold mb-2 text-sm">📋 Status Iuran Anggota</h2>
+      <div class="scroll-x rounded-xl border border-slate-700">
+        <table class="matrix w-full text-sm whitespace-nowrap">
+          <thead>
+            <tr id="mHead" class="bg-slate-800 text-slate-300 text-xs"></tr>
+          </thead>
+          <tbody id="mBody"></tbody>
+        </table>
+      </div>
+      <p class="text-[11px] text-slate-500 mt-1">Geser tabel ke samping untuk melihat semua bulan →</p>
+    </section>
+
+    <!-- Expenses -->
+    <section>
+      <h2 class="font-semibold mb-2 text-sm">🧾 Riwayat Pengeluaran</h2>
+      <div id="expList" class="space-y-2"></div>
+    </section>
+
+    <footer class="text-center text-[11px] text-slate-600 mt-8">
+      KAS REGU 3 &bull; <span id="upd"></span>
+    </footer>
+  </div>
+</div>
+
+<script>
+const BULAN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+const rp = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+const namaBulan = ym => {
+  const [y, m] = ym.split('-');
+  return BULAN[Number(m) - 1] + ' ' + y;
+};
+const tglID = iso => {
+  const [y, m, d] = iso.split('-');
+  return `${Number(d)} ${BULAN[Number(m) - 1]} ${y}`;
+};
+
+let ALL_MONTHS = [];
+let ACTIVE = [];
+
+async function load() {
+  const err = document.getElementById('err');
+  err.classList.add('hidden');
+  try {
+    const qs = ACTIVE.length ? '?months=' + ACTIVE.join(',') : '';
+    const r = await fetch('/api/summary' + qs);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    ALL_MONTHS = d.available_months || d.months || [];
+    if (!ACTIVE.length) ACTIVE = [...(d.months || [])];
+    render(d);
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+  } catch (e) {
+    document.getElementById('loading').classList.add('hidden');
+    err.textContent = 'Gagal memuat data: ' + e.message;
+    err.classList.remove('hidden');
+  }
+}
+
+function render(d) {
+  document.getElementById('stIncome').textContent = rp(d.total_income);
+  document.getElementById('stExpense').textContent = rp(d.total_expense);
+  const bal = document.getElementById('stBalance');
+  bal.textContent = rp(d.current_balance);
+  bal.className = 'font-bold text-sm sm:text-lg ' + (d.current_balance < 0 ? 'text-rose-400' : 'text-amber-300');
+  document.getElementById('upd').textContent = 'Diperbarui ' + new Date().toLocaleString('id-ID');
+
+  // chips
+  const chips = document.getElementById('chips');
+  chips.innerHTML = '';
+  ALL_MONTHS.forEach(m => {
+    const on = ACTIVE.includes(m);
+    const b = document.createElement('button');
+    b.textContent = namaBulan(m);
+    b.className = 'px-2.5 py-1 rounded-full text-xs border ' +
+      (on ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400');
+    b.onclick = () => {
+      if (on) { if (ACTIVE.length > 1) ACTIVE = ACTIVE.filter(x => x !== m); }
+      else { ACTIVE.push(m); ACTIVE.sort(); }
+      load();
+    };
+    chips.appendChild(b);
+  });
+
+  // per month
+  const pm = document.getElementById('perMonth');
+  pm.innerHTML = '';
+  (d.per_month || []).forEach(p => {
+    const s = document.createElement('span');
+    s.className = 'px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300';
+    s.textContent = `${namaBulan(p.month)}: ${p.count} lunas (${rp(p.total)})`;
+    pm.appendChild(s);
+  });
+
+  // matrix head
+  const head = document.getElementById('mHead');
+  head.innerHTML = '<th class="text-left px-3 py-2 bg-slate-800">Anggota</th>' +
+    d.months.map(m => `<th class="px-3 py-2 bg-slate-800 text-center">${namaBulan(m)}</th>`).join('');
+
+  // matrix body
+  const body = document.getElementById('mBody');
+  body.innerHTML = '';
+  d.members.forEach((m, i) => {
+    const tr = document.createElement('tr');
+    tr.className = i % 2 ? 'bg-slate-800/40' : 'bg-slate-800/10';
+    const dim = m.is_active ? '' : ' opacity-50';
+    let tds = `<td class="px-3 py-2 font-medium bg-slate-900${dim}">${m.name}${m.is_active ? '' : ' <span class="text-[10px] text-slate-500">(nonaktif)</span>'}</td>`;
+    d.months.forEach(mo => {
+      tds += m.paid[mo]
+        ? '<td class="px-3 py-2 text-center"><span class="inline-block px-2 py-0.5 rounded-full text-xs bg-emerald-900/60 border border-emerald-700 text-emerald-300">✓</span></td>'
+        : '<td class="px-3 py-2 text-center"><span class="inline-block px-2 py-0.5 rounded-full text-xs bg-rose-900/40 border border-rose-800 text-rose-400">–</span></td>';
+    });
+    tr.innerHTML = tds;
+    body.appendChild(tr);
+  });
+
+  // expenses
+  const ex = document.getElementById('expList');
+  ex.innerHTML = '';
+  if (!d.expenses.length) {
+    ex.innerHTML = '<div class="text-slate-500 text-sm">Belum ada pengeluaran.</div>';
+  }
+  d.expenses.forEach(e => {
+    const div = document.createElement('div');
+    div.className = 'bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 flex justify-between gap-2';
+    div.innerHTML = `<div><div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500">${tglID(e.expense_date)}</div></div><div class="font-bold text-rose-400 text-sm whitespace-nowrap">${rp(e.amount)}</div>`;
+    ex.appendChild(div);
+  });
+}
+
+load();
+</script>
+</body>
+</html>
