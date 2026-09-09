@@ -67,6 +67,8 @@ async function getSummary(url, env) {
     ).results || [];
   }
   const paidSet = new Set(payRows.map((r) => `${r.member_id}|${r.month_period}`));
+  const totals = {};
+  for (const r of payRows) totals[r.member_id] = (totals[r.member_id] || 0) + (r.amount || 0);
 
   const matrix = members.map((m) => {
     const paid = {};
@@ -83,6 +85,7 @@ async function getSummary(url, env) {
       paid,
       paid_count,
       unpaid_count: months.length - paid_count,
+      total_paid: totals[m.id] || 0,
     };
   });
 

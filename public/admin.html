@@ -11,6 +11,13 @@
     position: sticky; left: 0; z-index: 2;
   }
   table.matrix thead th:first-child { z-index: 3; }
+  /* solid backdrop so scrolled content doesn't bleed through the frozen name column */
+  table.matrix tbody tr:nth-child(even) td:first-child { background-color: rgb(30 41 59); }
+  table.matrix tbody tr:nth-child(odd) td:first-child { background-color: rgb(15 23 42); }
+  table.matrix tbody td:first-child { box-shadow: 4px 0 6px -4px rgb(0 0 0 / .6); }
+  /* row hover for readability across wide rows */
+  table.matrix tbody tr:hover td { background-color: rgb(51 65 85 / .45); }
+  table.matrix tbody tr:hover td:first-child { background-color: rgb(51 65 85); }
   .tgl { cursor: pointer; user-select: none; }
   .tgl:active { transform: scale(.9); }
 </style>
@@ -99,6 +106,9 @@ const rp = n => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
 const namaBulan = ym => { const [y,m] = ym.split('-'); return BULAN[Number(m)-1] + ' ' + y; };
 const tglID = iso => { const [y,m,d] = iso.split('-'); return `${Number(d)} ${BULAN[Number(m)-1]} ${y}`; };
 const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
+// current month (local time) for the "Bulan Ini" highlight
+const _now = new Date();
+const THIS_MONTH = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`;
 
 let TOKEN = sessionStorage.getItem('kas_token') || '';
 let ALL_MONTHS = [];
@@ -174,23 +184,31 @@ function render() {
     chips.appendChild(b);
   });
 
-  // matrix
+  // matrix (+ "Bulan Ini" badge on the current month, Total Bayar on the far right)
   document.getElementById('mHead').innerHTML =
-    '<th class="text-left px-3 py-2 bg-slate-800">Anggota</th>' +
-    d.months.map(m => `<th class="px-3 py-2 bg-slate-800 text-center">${namaBulan(m)}</th>`).join('');
+    '<th class="text-left px-3 py-2 bg-slate-800 border-b-2 border-b-transparent">Anggota</th>' +
+    d.months.map(m => {
+      const isNow = m === THIS_MONTH;
+      return `<th class="px-3 py-2 text-center border-b-2 ${isNow ? 'bg-amber-950/50 border-b-amber-500/60' : 'bg-slate-800 border-b-transparent'}">${namaBulan(m)}${isNow ? '<span class="ml-1 px-1.5 py-px rounded text-[10px] font-bold bg-amber-500/20 border border-amber-500/50 text-amber-300 whitespace-nowrap">Bulan Ini</span>' : ''}</th>`;
+    }).join('') +
+    '<th class="px-3 py-2 bg-slate-800 text-right border-b-2 border-b-transparent">Total Bayar</th>';
   const body = document.getElementById('mBody');
   body.innerHTML = '';
+  const fee = d.month_fee || 10000;
   d.members.forEach((m, i) => {
     const tr = document.createElement('tr');
     tr.className = i % 2 ? 'bg-slate-800/40' : 'bg-slate-800/10';
     const dim = m.is_active ? '' : ' opacity-50';
-    let html = `<td class="px-3 py-2 font-medium bg-slate-900${dim}">${m.name}</td>`;
+    const total = m.total_paid ?? (m.paid_count * fee);
+    let html = `<td class="px-3 py-2 font-medium${dim}">${m.name}</td>`;
     d.months.forEach(mo => {
       const paid = m.paid[mo];
-      html += `<td class="px-3 py-2 text-center"><span data-mid="${m.id}" data-mo="${mo}" data-paid="${paid ? 1 : 0}" class="tgl inline-block px-2.5 py-0.5 rounded-full text-xs border ` +
+      const nowCls = mo === THIS_MONTH ? ' bg-amber-400/5' : '';
+      html += `<td class="px-3 py-2 text-center${nowCls}"><span data-mid="${m.id}" data-mo="${mo}" data-paid="${paid ? 1 : 0}" class="tgl inline-block px-2.5 py-0.5 rounded-full text-xs border ` +
         (paid ? 'bg-emerald-900/60 border-emerald-700 text-emerald-300">✓'
               : 'bg-slate-900 border-slate-700 text-slate-500">–') + '</span></td>';
     });
+    html += `<td data-total-for="${m.id}" data-total="${total}" class="px-3 py-2 text-right font-mono font-bold text-amber-400 whitespace-nowrap">${rp(total)}</td>`;
     tr.innerHTML = html;
     body.appendChild(tr);
   });
@@ -250,7 +268,7 @@ async function togglePay(member_id, month_period, status) {
   });
   if (r.status === 401) return logout();
   if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menyimpan.'); }
-  // instant UI flip, then re-sync
+  // instant UI flip (badge + Total Bayar), then re-sync
   const el = document.querySelector(`.tgl[data-mid="${member_id}"][data-mo="${month_period}"]`);
   if (el) {
     el.dataset.paid = status ? '1' : '0';
@@ -258,6 +276,13 @@ async function togglePay(member_id, month_period, status) {
       (status ? 'bg-emerald-900/60 border-emerald-700 text-emerald-300">✓'
               : 'bg-slate-900 border-slate-700 text-slate-500">–');
     el.textContent = status ? '✓' : '–';
+    const fee = (DATA && DATA.month_fee) || 10000;
+    const tc = document.querySelector(`[data-total-for="${member_id}"]`);
+    if (tc) {
+      const cur = Number(tc.dataset.total || 0) + (status ? fee : -fee);
+      tc.dataset.total = Math.max(0, cur);
+      tc.textContent = rp(tc.dataset.total);
+    }
   }
   load();
 }

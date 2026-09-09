@@ -12,6 +12,13 @@
     position: sticky; left: 0; z-index: 2;
   }
   table.matrix thead th:first-child { z-index: 3; }
+  /* solid backdrop so scrolled content doesn't bleed through the frozen name column */
+  table.matrix tbody tr:nth-child(even) td:first-child { background-color: rgb(30 41 59); }
+  table.matrix tbody tr:nth-child(odd) td:first-child { background-color: rgb(15 23 42); }
+  table.matrix tbody td:first-child { box-shadow: 4px 0 6px -4px rgb(0 0 0 / .6); }
+  /* row hover for readability across wide rows */
+  table.matrix tbody tr:hover td { background-color: rgb(51 65 85 / .45); }
+  table.matrix tbody tr:hover td:first-child { background-color: rgb(51 65 85); }
 </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
@@ -66,7 +73,7 @@
           <tbody id="mBody"></tbody>
         </table>
       </div>
-      <p class="text-[11px] text-slate-500 mt-1">Geser tabel ke samping untuk melihat semua bulan →</p>
+      <p class="text-[11px] text-slate-500 mt-1">Geser tabel ke samping untuk melihat semua bulan → &bull; kolom Total mengikuti periode yang ditampilkan.</p>
     </section>
 
     <!-- Expenses -->
@@ -92,6 +99,9 @@ const tglID = iso => {
   const [y, m, d] = iso.split('-');
   return `${Number(d)} ${BULAN[Number(m) - 1]} ${y}`;
 };
+// current month (local time) for the "Bulan Ini" highlight
+const _now = new Date();
+const THIS_MONTH = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}`;
 
 let ALL_MONTHS = [];
 let ACTIVE = [];
@@ -146,29 +156,39 @@ function render(d) {
   pm.innerHTML = '';
   (d.per_month || []).forEach(p => {
     const s = document.createElement('span');
-    s.className = 'px-2 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-300';
-    s.textContent = `${namaBulan(p.month)}: ${p.count} lunas (${rp(p.total)})`;
+    const isNow = p.month === THIS_MONTH;
+    s.className = 'px-2 py-1 rounded-lg border ' +
+      (isNow ? 'bg-amber-950/50 border-amber-500/50 text-amber-200' : 'bg-slate-800 border-slate-700 text-slate-300');
+    s.textContent = `${namaBulan(p.month)}: ${p.count} lunas (${rp(p.total)})${isNow ? ' • bulan ini' : ''}`;
     pm.appendChild(s);
   });
 
-  // matrix head
+  // matrix head (+ "Bulan Ini" badge on the current month, Total Bayar on the far right)
   const head = document.getElementById('mHead');
-  head.innerHTML = '<th class="text-left px-3 py-2 bg-slate-800">Anggota</th>' +
-    d.months.map(m => `<th class="px-3 py-2 bg-slate-800 text-center">${namaBulan(m)}</th>`).join('');
+  head.innerHTML = '<th class="text-left px-3 py-2 bg-slate-800 border-b-2 border-b-transparent">Anggota</th>' +
+    d.months.map(m => {
+      const isNow = m === THIS_MONTH;
+      return `<th class="px-3 py-2 text-center border-b-2 ${isNow ? 'bg-amber-950/50 border-b-amber-500/60' : 'bg-slate-800 border-b-transparent'}">${namaBulan(m)}${isNow ? '<span class="ml-1 px-1.5 py-px rounded text-[10px] font-bold bg-amber-500/20 border border-amber-500/50 text-amber-300 whitespace-nowrap">Bulan Ini</span>' : ''}</th>`;
+    }).join('') +
+    '<th class="px-3 py-2 bg-slate-800 text-right border-b-2 border-b-transparent">Total Bayar</th>';
 
   // matrix body
   const body = document.getElementById('mBody');
   body.innerHTML = '';
+  const fee = d.month_fee || 10000;
   d.members.forEach((m, i) => {
     const tr = document.createElement('tr');
     tr.className = i % 2 ? 'bg-slate-800/40' : 'bg-slate-800/10';
     const dim = m.is_active ? '' : ' opacity-50';
-    let tds = `<td class="px-3 py-2 font-medium bg-slate-900${dim}">${m.name}${m.is_active ? '' : ' <span class="text-[10px] text-slate-500">(nonaktif)</span>'}</td>`;
+    const total = m.total_paid ?? (m.paid_count * fee);
+    let tds = `<td class="px-3 py-2 font-medium${dim}">${m.name}${m.is_active ? '' : ' <span class="text-[10px] text-slate-500">(nonaktif)</span>'}</td>`;
     d.months.forEach(mo => {
+      const nowCls = mo === THIS_MONTH ? ' bg-amber-400/5' : '';
       tds += m.paid[mo]
-        ? '<td class="px-3 py-2 text-center"><span class="inline-block px-2 py-0.5 rounded-full text-xs bg-emerald-900/60 border border-emerald-700 text-emerald-300">✓</span></td>'
-        : '<td class="px-3 py-2 text-center"><span class="inline-block px-2 py-0.5 rounded-full text-xs bg-rose-900/40 border border-rose-800 text-rose-400">–</span></td>';
+        ? `<td class="px-3 py-2 text-center${nowCls}"><span class="inline-block px-2 py-0.5 rounded-full text-xs bg-emerald-900/60 border border-emerald-700 text-emerald-300">✓</span></td>`
+        : `<td class="px-3 py-2 text-center${nowCls}"><span class="inline-block px-2 py-0.5 rounded-full text-xs bg-rose-900/40 border border-rose-800 text-rose-400">–</span></td>`;
     });
+    tds += `<td class="px-3 py-2 text-right font-mono font-bold text-amber-400 whitespace-nowrap">${rp(total)}</td>`;
     tr.innerHTML = tds;
     body.appendChild(tr);
   });
