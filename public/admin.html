@@ -49,6 +49,9 @@
     </div>
     <div id="err" class="hidden mb-3 p-3 rounded-lg bg-rose-900/40 border border-rose-700 text-rose-200 text-sm"></div>
 
+    <!-- Quick share to WhatsApp -->
+    <button id="btnWA" class="w-full mb-3 bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 rounded-xl py-2.5 text-sm font-semibold">📋 Salin Format WA</button>
+
     <!-- Month filter + add month -->
     <section class="mb-4">
       <div class="flex flex-wrap gap-1.5 items-center" id="chips"></div>
@@ -62,6 +65,10 @@
     <!-- Payment matrix (tap to toggle) -->
     <section class="mb-6">
       <h2 class="font-semibold mb-1 text-sm">📋 Kelola Iuran <span class="text-slate-500 font-normal">(ketuk badge untuk ubah)</span></h2>
+      <div class="flex flex-wrap gap-1.5 mb-2">
+        <button id="pillAll" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">Semua Anggota (<span id="pillAllN">0</span>)</button>
+        <button id="pillUnpaid" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">🔴 Belum Lunas Bulan Ini (<span id="pillUnpaidN">0</span>)</button>
+      </div>
       <div class="scroll-x rounded-xl border border-slate-700">
         <table class="matrix w-full text-sm whitespace-nowrap">
           <thead><tr id="mHead" class="bg-slate-800 text-slate-300 text-xs"></tr></thead>
@@ -114,6 +121,64 @@ let TOKEN = sessionStorage.getItem('kas_token') || '';
 let ALL_MONTHS = [];
 let ACTIVE = [];
 let DATA = null;
+let SHOW_UNPAID_ONLY = false;
+
+function unpaidList(d) {
+  return (d.members || []).filter(m => !m.paid[THIS_MONTH]);
+}
+function paidCount(d) {
+  return (d.members || []).filter(m => m.paid[THIS_MONTH]).length;
+}
+
+async function copyText(text, btn, doneLabel) {
+  let ok = false;
+  try {
+    await navigator.clipboard.writeText(text);
+    ok = true;
+  } catch {
+    // fallback for non-secure contexts / older browsers
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand('copy'); } catch {}
+    ta.remove();
+  }
+  if (btn && doneLabel) {
+    const orig = btn.textContent;
+    if (ok) {
+      btn.textContent = doneLabel;
+      setTimeout(() => { btn.textContent = orig; }, 1800);
+    }
+  }
+  return ok;
+}
+
+function buildWAText() {
+  const d = DATA;
+  if (!d) return '';
+  const bulan = namaBulan(THIS_MONTH);
+  const unpaid = unpaidList(d);
+  const paidN = paidCount(d);
+  const totalN = (d.members || []).length;
+  const lines = [
+    `📢 UPDATE KAS REGU 3 (${bulan})`,
+    `💰 Saldo Kas: ${rp(d.current_balance)}`,
+    `(Masuk: ${rp(d.total_income)} | Keluar: ${rp(d.total_expense)})`,
+    '',
+    `🔴 Belum Lunas (${bulan}):`
+  ];
+  if (unpaid.length) unpaid.forEach(m => lines.push(`- ${m.name}`));
+  else lines.push('- Nihil, semua sudah lunas 🎉');
+  lines.push(
+    '',
+    `🟢 Lunas: ${paidN}/${totalN} orang`,
+    '',
+    'Cek rincian & mutasi lengkap:',
+    `👉 ${location.origin}`
+  );
+  return lines.join('\n');
+}
 
 const auth = () => ({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN });
 const showErr = msg => {
@@ -195,7 +260,23 @@ function render() {
   const body = document.getElementById('mBody');
   body.innerHTML = '';
   const fee = d.month_fee || 10000;
-  d.members.forEach((m, i) => {
+  let rows = d.members.slice();
+  if (SHOW_UNPAID_ONLY) rows = rows.filter(m => !m.paid[THIS_MONTH]);
+  const totalN = (d.members || []).length;
+  document.getElementById('pillAllN').textContent = totalN;
+  document.getElementById('pillUnpaidN').textContent = unpaidList(d).length;
+  const pillAll = document.getElementById('pillAll');
+  const pillUnpaid = document.getElementById('pillUnpaid');
+  pillAll.className = 'px-2.5 py-1 rounded-full text-xs border ' +
+    (!SHOW_UNPAID_ONLY ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400');
+  pillUnpaid.className = 'px-2.5 py-1 rounded-full text-xs border ' +
+    (SHOW_UNPAID_ONLY ? 'bg-rose-700 border-rose-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400');
+  if (!rows.length && SHOW_UNPAID_ONLY) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="${d.months.length + 2}" class="px-3 py-6 text-center text-sm text-emerald-300">🎉 Semua anggota sudah lunas di bulan ini!</td>`;
+    body.appendChild(tr);
+  }
+  rows.forEach((m, i) => {
     const tr = document.createElement('tr');
     tr.className = i % 2 ? 'bg-slate-800/40' : 'bg-slate-800/10';
     const dim = m.is_active ? '' : ' opacity-50';
@@ -297,6 +378,21 @@ function logout() {
 document.getElementById('btnLogin').onclick = doLogin;
 document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('btnLogout').onclick = logout;
+
+document.getElementById('btnWA').onclick = e => {
+  const t = buildWAText();
+  if (!t) return;
+  copyText(t, e.currentTarget, '✓ Tersalin ke Clipboard!');
+};
+
+document.getElementById('pillAll').onclick = () => {
+  SHOW_UNPAID_ONLY = false;
+  if (DATA) render();
+};
+document.getElementById('pillUnpaid').onclick = () => {
+  SHOW_UNPAID_ONLY = true;
+  if (DATA) render();
+};
 
 document.getElementById('btnAddMonth').onclick = () => {
   const v = document.getElementById('newMonth').value.trim();
