@@ -240,44 +240,105 @@ function drawWheel(highlight = -1) {
   ctx.fillText('★', cx, cy + 2);
 }
 
-// ---------- Spin ----------
+// ---------- Spin: realistic ratchet physics (overshoot + spring recoil) ----------
+let settling = false; // true during the final spring-settle phase
+let kickGen = 0;      // invalidates stale flipper snap-back timeouts
+
+function kickPointer(strength) {
+  // flipper deflects with the rotation, then snaps back with a tick
+  const myGen = kickGen;
+  const kick = document.getElementById('pointerKick');
+  tickSound();
+  kick.style.transform = `translateX(-50%) rotate(${(8 + 22 * strength).toFixed(1)}deg)`;
+  setTimeout(() => {
+    if (myGen === kickGen && !settling) kick.style.transform = 'translateX(-50%)';
+  }, 70);
+}
+
 function spinToIndex(k) {
   const list = activeNames();
   const arc = TAU / list.length;
-  // align center of segment k with the pointer, after several full turns
+  const winnerId = list[k] ? list[k].id : null;
+  // resting angle: center of segment k exactly under the pointer
   const delta = norm(POINTER - (rot + (k + 0.5) * arc));
   const turns = 6 + Math.floor(Math.random() * 3); // 6–8 putaran penuh
-  const from = rot, to = rot + turns * TAU + delta;
-  const dur = 6000 + Math.random() * 1500;
+  const from = rot, to = from + turns * TAU + delta;
+  // overshoot: wheel pushes just past center toward the boundary (looks like
+  // it nearly escapes to the neighbour), then a damped spring pulls it back
+  // to settle EXACTLY on the winner — locked targets stay 100% accurate
+  const overshoot = arc * (0.28 + Math.random() * 0.12); // ~8-11 derajat utk 13 nama
+  const peak = to + overshoot;
+  const durSpin = 5500 + Math.random() * 1200;
+  const durSettle = 1200; // ms of spring recoil
+  const OMEGA = 13, ZETA = 0.22; // ~2 Hz wobble, fully decayed in ~1.2 s
+
   const btn = document.getElementById('btnSpin');
   btn.disabled = true;
   spinning = true;
+  settling = false;
+  kickGen++;
+  const myGen = kickGen;
+
   const t0 = performance.now();
   let lastIdx = idxUnderPointer(from), lastTick = 0;
   const kick = document.getElementById('pointerKick');
-  (function frame(t) {
-    const p = Math.min(1, (t - t0) / dur);
+
+  // ---- phase 1: fast spin easing out to just PAST the winner ----
+  (function frameSpin(t) {
+    if (myGen !== kickGen) return; // superseded
+    const p = Math.min(1, (t - t0) / durSpin);
     const eased = 1 - Math.pow(1 - p, 5); // easeOutQuint: kencang lalu melambat
-    rot = from + (to - from) * eased;
+    rot = from + (peak - from) * eased;
     const idx = idxUnderPointer(rot);
     if (idx !== lastIdx) {
       lastIdx = idx;
       if (t - lastTick > 40) { // throttle tick saat kecepatan tinggi
         lastTick = t;
-        tickSound();
-        kick.style.transform = 'translateX(-50%) rotate(18deg)';
-        setTimeout(() => { kick.style.transform = 'translateX(-50%)'; }, 80);
+        // hard flicks at speed, barely a nudge as it crawls to the peak
+        kickPointer(Math.min(1, 0.12 + Math.pow(1 - p, 4) * 1.2));
       }
     }
     drawWheel(idx);
-    if (p < 1) requestAnimationFrame(frame);
+    if (p < 1) requestAnimationFrame(frameSpin);
+    else frameSettle(performance.now());
+  })(t0);
+
+  // ---- phase 2: damped spring recoil, settles exactly on `to` ----
+  let sPrev = peak, sPt = 0, sLastTick = 0;
+  function frameSettle(s) {
+    if (myGen !== kickGen) return;
+    if (!sPt) { sPt = s; sPrev = peak; }
+    settling = true;
+    const st = (s - sPt) / 1000;
+    const damp = Math.exp(-ZETA * OMEGA * st);
+    rot = to + overshoot * damp * Math.cos(OMEGA * st);
+    // flipper vibrates against the spring motion (opposes the velocity)
+    const dt = Math.max(1, s - (frameSettle._pt || s));
+    frameSettle._pt = s;
+    const vel = (rot - sPrev) / (dt / 1000); // rad/s
+    sPrev = rot;
+    const deg = Math.max(-26, Math.min(26, -vel * 12));
+    kick.style.transform = `translateX(-50%) rotate(${deg.toFixed(1)}deg)`;
+    const idx = idxUnderPointer(rot);
+    if (idx !== lastIdx) {
+      lastIdx = idx;
+      if (s - sLastTick > 90) { sLastTick = s; tickSound(); } // rattle on boundary graze
+    }
+    drawWheel(idx);
+    if (st * 1000 < durSettle) requestAnimationFrame(frameSettle);
     else {
       rot = norm(to);
+      settling = false;
       spinning = false;
       btn.disabled = false;
-      finish(idx);
+      kick.style.transform = 'translateX(-50%)';
+      // resolve winner by id so a mid-spin checklist edit can't shift the result
+      const fl = activeNames();
+      let fi = winnerId !== null ? fl.findIndex(n => String(n.id) === String(winnerId)) : -1;
+      if (fi < 0) fi = Math.max(0, Math.min(k, fl.length - 1));
+      finish(fi);
     }
-  })(t0);
+  }
 }
 
 function doSpin() {
