@@ -143,6 +143,18 @@ function tickSound() {
     o.start(); o.stop(c.currentTime + 0.035);
   } catch {}
 }
+function clackSound(strength = 0.5) {
+  // benturan pin: lebih keras & lebih rendah dari tick biasa, skala dgn vHit
+  try {
+    const c = ac(), o = c.createOscillator(), g = c.createGain();
+    const s = Math.min(1, Math.max(0, strength));
+    o.type = 'square'; o.frequency.value = 2200 - 900 * s;
+    g.gain.setValueAtTime(0.08 + 0.16 * s, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.05);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.055);
+  } catch {}
+}
 function fanfare() {
   try {
     const c = ac();
@@ -240,12 +252,18 @@ function drawWheel(highlight = -1) {
   ctx.fillText('★', cx, cy + 2);
 }
 
-// ---------- Spin: 10 skenario settle organik (dipilih acak per putaran) ----------
-// SNAP_ESCAPE, DEEP_RECOIL, DEAD_STOP, DOUBLE_WOBBLE, SLOW_CREEP,
-// SOFT_CUSHION, PIN_CHATTER, HEAVY_HESITATION, MICRO_RECOIL, SMOOTH_DRIFT.
-// Semua dirumuskan relatif thd tengah segmen pemenang & berakhir TEPAT di sana,
-// jadi stealth target 100% akurat apa pun skenarionya.
-let settling = false; // true during the final spring-settle phase
+// ---------- Spin: tabrakan pin berbasis kecepatan (rebound vs break-through) ----------
+// Fase 1 (putaran cepat) parkir di titik ancang tepat di garis pin penentu.
+// Saat kontak, resolver membandingkan sisa kecepatan sudut v_hit dengan
+// ambang break-point pasak V_brk (per-flavor + noise per putaran):
+//   Opsi A — PIN REBOUND: pasak menahan, roda terpental balik (recoil tajam,
+//     amplitudo diskalakan dari v_hit: makin kencang makin nyata).
+//   Opsi B — PIN BREAK-THROUGH: v_hit jauh di atas ambang → pasak jebol.
+// Hasil di garis MUNCUL dari v_hit vs kekakuan pasak — bukan hasil tetap —
+// sehingga skenario yang sama bisa berakhir beda tiap putaran. Semua cabang
+// dirumuskan relatif thd tengah segmen pemenang & berakhir TEPAT di sana:
+// stealth target 100% akurat apa pun hasilnya.
+let settling = false; // true during the final physics-settle phase
 let kickGen = 0;      // invalidates stale flipper snap-back timeouts
 
 function kickPointer(strength) {
@@ -267,11 +285,20 @@ function spinToIndex(k) {
   const delta = norm(POINTER - (rot + (k + 0.5) * arc));
   const turns = 6 + Math.floor(Math.random() * 3); // 6–8 putaran penuh
   const from = rot, to = from + turns * TAU + delta;
-  // 10 skenario settle organik, dipilih acak per putaran. Semuanya dirumuskan
-  // RELATIF terhadap `to` (tengah segmen k) dan berakhir TEPAT di `to` —
-  // stealth target 100% akurat apa pun skenarionya.
+  // Model tabrakan pasak: tiap garis punya ambang break-point Vbrk (kekakuan
+  // pasak + noise), tiap putaran punya sisa kecepatan vHit. Kelebihan
+  // momentum TIDAK otomatis lolos ke depan:
+  //   vHit >= Vbrk → PIN BREAK-THROUGH (pasak jebol, "klek!" maju).
+  //   vHit <  Vbrk → PIN REBOUND (pasak menahan, terpental balik tajam
+  //                  dengan amplitudo ∝ vHit, lalu lolos di percobaan kedua).
+  // Hasil di garis MUNCUL dari perbandingan ini — skenario yang sama bisa
+  // berakhir beda tiap putaran. Semua cabang berakhir TEPAT di `to` —
+  // stealth target 100% akurat apa pun hasilnya.
   const R = (a, b) => a + Math.random() * (b - a);
   const SCEN = Math.floor(Math.random() * 10);
+  const vHit = R(0.25, 1);   // sisa kecepatan sudut saat kontak pin (0..1)
+  const Vbrk = R(0.35, 0.9); // ambang jebol pasak garis ini (~50:50 emergen)
+  const pinVerdict = vHit >= Vbrk ? 'break' : 'rebound';
   const durSpin = 5500 + Math.random() * 1200;
 
   const btn = document.getElementById('btnSpin');
@@ -320,6 +347,8 @@ function spinToIndex(k) {
     if (myGen !== kickGen) return;
     const seg = segQueue[segIdx];
     if (!seg) { endSpin(); return; }
+    // segmen tabrakan: bunyikan CLACK sekali tepat saat roda menyentuh pin
+    if (seg.hit != null && !seg.hitPlayed) { seg.hitPlayed = true; clackSound(seg.hit); }
     settling = true;
     const t = s - segPt, d = Math.max(1, seg.dur);
     const s01 = Math.min(1, t / d);
@@ -371,8 +400,8 @@ function spinToIndex(k) {
   const holdBack = arc * R(0.52, 0.58); // SNAP/HEAVY: nempel garis masuk
   // DEEP_RECOIL: LEWATI garis keluar 5-15% segmen (pointer sempat tunjuk
   // tetangga), lalu pegas kuat menyentak balik — "mencoba keluar, terpental"
-  const overDeep = arc * R(0.55, 0.65);
-  const overMicro = arc * 0.11;         // MICRO_RECOIL: tipis ~3 derajat
+  const overDeep = arc * R(0.55, 0.65) * (0.75 + 0.5 * vHit); // ∝ benturan
+  const overMicro = arc * 0.11 * (0.7 + 0.6 * vHit); // recoil tipis ∝ benturan
   const overSoft = arc * R(0.10, 0.14); // SOFT_CUSHION: sandaran bantalan
   let phase1End = to;
   if (SCEN === 0 || SCEN === 7) phase1End = to - holdBack;
@@ -405,33 +434,73 @@ function spinToIndex(k) {
     else { buildScenario(); nextSeg(performance.now()); requestAnimationFrame(stepFrame); }
   })(t0);
 
-  // ---- 10 skenario settle: semua berakhir TEPAT di `to` ----
+  // ---- 10 skenario settle: verdict tabrakan pin menentukan cabang ----
   function buildScenario() {
     const D = t => t >= 1; // selesai saat s01 mencapai 1
+    // impactPress: menekan pasak sedikit ke depan + CLACK di momen kontak
+    function impactPress(c0, press, durMs) {
+      return { dur: durMs, needle: 'vel', hit: vHit, fn: s01 =>
+        c0 + press * Math.sin(s01 * Math.PI / 2), done: D };
+    }
+    // throwBack: terlempar ke belakang sejauh backAmp (∝ kekerasan benturan),
+    // overshoot kecil, menetap — kontinu dari c0, berakhir tepat di c0-backAmp
+    function throwBack(c0, backAmp, durMs) {
+      return { dur: durMs, needle: 'vel', fn: s01 => {
+        const e = 1 - Math.pow(1 - s01, 3); // easeOutCubic ke belakang
+        return c0 - backAmp * (e + 0.12 * Math.sin(s01 * Math.PI) * (1 - s01));
+      }, done: D };
+    }
+    // snapForward: dorongan kedua quasi-statis dari c0 menembus pin ke `to`
+    // + overshoot kecil lalu settle — kontinu dari c0, berakhir TEPAT di `to`
+    function snapForward(c0, durMs, tickGap = 90) {
+      const travel = to - c0, T = durMs / 1000;
+      return { dur: durMs, needle: 'tickvel', tickGap, fn: s01 => {
+        const st = s01 * T;
+        return to - travel * Math.exp(-7 * st) * Math.cos(13 * st);
+      }, done: D };
+    }
     switch (SCEN) {
-      // 0 — SNAP_ESCAPE: merayap di garis masuk, jeda resistensi, "klek!" lolos maju
+      // 0 — SNAP_ESCAPE: merayap di garis masuk, jeda resistensi, lalu verdict:
+      //   break → "klek!" lolos maju. rebound → CLACK terpental balik,
+      //   jeda, dorongan kedua lolos masuk.
       case 0: {
         const travel = to - anchor;
         const hesitate = R(700, 1200);
-        enqueue([
-          { dur: hesitate, needle: 'bend', fn: (s01, t) =>
-            anchor + arc * 0.003 * Math.sin(t * 0.045) * Math.exp(-t / 2500) },
-          { dur: 900, needle: 'tickvel', tickGap: 90, fn: s01 => {
-            const st = s01 * 0.9;
-            return to - travel * Math.exp(-7 * st) * Math.cos(13 * st);
-          }, done: D },
-        ]);
+        const bendSeg = { dur: hesitate, needle: 'bend', fn: (s01, t) =>
+          anchor + arc * 0.003 * Math.sin(t * 0.045) * Math.exp(-t / 2500) };
+        if (pinVerdict === 'rebound') {
+          const press = arc * 0.02;
+          const c1 = anchor + press;
+          const back = c1 - arc * (0.18 + 0.4 * vHit);
+          enqueue([
+            bendSeg,
+            impactPress(anchor, press, 140),
+            throwBack(c1, c1 - back, 700),
+            { dur: R(200, 350), needle: 'still', fn: () => back },
+            snapForward(back, 900),
+          ]);
+        } else {
+          enqueue([
+            bendSeg,
+            { dur: 900, needle: 'tickvel', tickGap: 90, fn: s01 => {
+              const st = s01 * 0.9;
+              return to - travel * Math.exp(-7 * st) * Math.cos(13 * st);
+            }, done: D },
+          ]);
+        }
         break;
       }
-      // 1 — DEEP_RECOIL: lewat pin dalam, terpental dramatis ke belakang.
-      // Fase 1 sudah melewati garis keluar (pointer menunjuk tetangga),
-      // lalu pegas underdamped menyentak balik jauh ke tengah + 1 ayunan.
+      // 1 — DEEP_RECOIL: fase 1 sudah membentur garis keluar dengan vHit.
+      //   rebound → pasak MENAHAN: CLACK + pegas kuat menyentak balik jauh.
+      //   break → pasak JEBOL: lolos tanpa CLACK, kembali tenang ke tengah.
       case 1: {
         const O = anchor - to, W = 11, Z = 0.14, T = 1600;
+        const held = pinVerdict === 'rebound';
         enqueue([
-          { dur: T, needle: 'tickvel', tickGap: 90, fn: s01 => {
+          { dur: T, needle: 'tickvel', tickGap: 90, hit: held ? vHit : null, fn: s01 => {
             const st = s01 * (T / 1000);
-            return to + O * Math.exp(-Z * W * st) * Math.cos(W * st);
+            const amp = held ? O : O * 0.55;
+            return to + amp * Math.exp(-Z * W * st) * Math.cos(W * st) + (held ? 0 : O * 0.45 * Math.exp(-4 * st));
           }, done: D },
         ]);
         break;
@@ -462,14 +531,30 @@ function spinToIndex(k) {
         ]);
         break;
       }
-      // 4 — SLOW_CREEP: gesekan tinggi, merayap tanpa lonjakan pegas.
-      // Fase 1 parkir di segmen tetangga; roda merayap smoothstep ~2 detik
-      // menembus garis masuk sampai ke tengah, tick pelan tiap batas.
+      // 4 — SLOW_CREEP: merayap dari tetangga menembus garis masuk + verdict:
+      //   break → merayap mulus sampai tengah.
+      //   rebound → mentok di pasak, CLACK terpental mundur, jeda,
+      //   dorongan kedua merayap masuk.
       case 4: {
-        enqueue([
-          { dur: 2100, needle: 'tickvel', tickGap: 200, fn: s01 =>
-            anchor + (to - anchor) * (s01 * s01 * (3 - 2 * s01)), done: D },
-        ]);
+        if (pinVerdict === 'rebound') {
+          const stallAt = to - arc * 0.5 - arc * 0.03; // mentok sebelum garis
+          const press = arc * 0.02;
+          const c1 = stallAt + press;
+          const backAmp = arc * (0.08 + 0.15 * vHit);
+          const back = c1 - backAmp;
+          const creep = (a, b) => s01 => a + (b - a) * (s01 * s01 * (3 - 2 * s01));
+          enqueue([
+            { dur: 1500, needle: 'tickvel', tickGap: 200, fn: creep(anchor, stallAt), done: D },
+            impactPress(stallAt, press, 150),
+            throwBack(c1, backAmp, 600),
+            { dur: 1800, needle: 'tickvel', tickGap: 200, fn: creep(back, to), done: D },
+          ]);
+        } else {
+          enqueue([
+            { dur: 2100, needle: 'tickvel', tickGap: 200, fn: s01 =>
+              anchor + (to - anchor) * (s01 * s01 * (3 - 2 * s01)), done: D },
+          ]);
+        }
         break;
       }
       // 5 — SOFT_CUSHION: membal lembut overdamped seperti bantalan karet.
@@ -489,51 +574,102 @@ function spinToIndex(k) {
         ]);
         break;
       }
-      // 6 — PIN_CHATTER: jarum derak cepat di atas pin sebelum terkunci diam
+      // 6 — PIN_CHATTER: derak cepat di atas pin + verdict:
+      //   break → derak meloloskan roda menembus garis ke tengah.
+      //   rebound → derak GAGAL menembus: CLACK, terpental balik,
+      //   lalu dorongan kedua lolos masuk.
       case 6: {
-        enqueue([
-          { dur: 1000, needle: 'rattle', tickGap: 55, fn: (s01, t) =>
-            to + arc * 0.012 * Math.sin(t * 0.09) * (1 - s01) + (anchor - to) * (1 - s01) * (1 - s01)
-          , done: D },
-          { dur: 300, needle: 'still', fn: () => to },
-        ]);
+        const chatter = { dur: 1000, needle: 'rattle', tickGap: 55, fn: (s01, t) =>
+          to + arc * 0.012 * Math.sin(t * 0.09) * (1 - s01) + (anchor - to) * (1 - s01) * (1 - s01)
+        , done: D };
+        if (pinVerdict === 'rebound') {
+          const press = arc * 0.015;
+          const c1 = to + press; // = ujung impactPress, kontinu
+          const back = c1 - arc * (0.15 + 0.35 * vHit);
+          enqueue([
+            chatter,
+            impactPress(to, press, 130),
+            throwBack(c1, c1 - back, 650),
+            snapForward(back, 850),
+          ]);
+        } else {
+          enqueue([
+            chatter,
+            { dur: 300, needle: 'still', fn: () => to },
+          ]);
+        }
         break;
       }
-      // 7 — HEAVY_HESITATION: mati total di garis ~300-400ms (hening),
-      // lalu sisa momentum menjatuhkannya selangkah ke depan + 1 getaran.
+      // 7 — HEAVY_HESITATION: diam ~300-400ms di garis (hening), lalu verdict:
+      //   break → momentum menjatuhkannya selangkah ke depan.
+      //   rebound → CLACK terpental ke belakang, jeda, dorongan kedua masuk.
       case 7: {
-        const travel = to - anchor;
-        enqueue([
-          { dur: R(300, 400), needle: 'still', fn: () => anchor },
-          { dur: 1100, needle: 'tickvel', tickGap: 90, fn: s01 => {
-            const st = s01 * 1.1;
-            return to - travel * Math.exp(-6 * st) * Math.cos(11 * st);
-          }, done: D },
-        ]);
+        const hold = { dur: R(300, 400), needle: 'still', fn: () => anchor };
+        if (pinVerdict === 'rebound') {
+          const press = arc * 0.02;
+          const c1 = anchor + press;
+          const back = c1 - arc * (0.18 + 0.4 * vHit);
+          enqueue([
+            hold,
+            impactPress(anchor, press, 140),
+            throwBack(c1, c1 - back, 700),
+            { dur: R(200, 350), needle: 'still', fn: () => back },
+            snapForward(back, 1000),
+          ]);
+        } else {
+          const travel = to - anchor;
+          enqueue([
+            hold,
+            { dur: 1100, needle: 'tickvel', tickGap: 90, fn: s01 => {
+              const st = s01 * 1.1;
+              return to - travel * Math.exp(-6 * st) * Math.cos(11 * st);
+            }, done: D },
+          ]);
+        }
         break;
       }
-      // 8 — MICRO_RECOIL: membal tipis 2-3 derajat, satu sentakan kaku
+      // 8 — MICRO_RECOIL: membal tipis di dekat tengah + verdict:
+      //   rebound → pasak MENAHAN: CLACK + satu sentakan kaku balik.
+      //   break → pasak sedikit MEMBERI: roda hanyut maju sekilas lalu
+      //   menetap lembut tanpa CLACK.
       case 8: {
         const O = anchor - to;
+        const held = pinVerdict === 'rebound';
         enqueue([
-          { dur: 550, needle: 'vel', fn: s01 => {
+          { dur: 550, needle: 'vel', hit: held ? vHit : null, fn: s01 => {
             const st = s01 * 0.55;
-            return to + O * Math.exp(-0.55 * 16 * st) * Math.cos(16 * st);
+            // kontinu dari anchor di kedua cabang; rebound = sentakan kaku
+            // balik, break = hanyut maju sekilas lalu menetap lembut
+            const osc = O * Math.exp(-(held ? 8.8 : 8) * st) * Math.cos(held ? 16 * st : 10 * st);
+            const drift = held ? 0 : O * 0.3 * (1 - Math.exp(-10 * st)) * Math.exp(-8 * st);
+            return to + osc + drift;
           }, done: D },
           { dur: 200, needle: 'still', fn: () => to },
         ]);
         break;
       }
-      // 9 — SMOOTH_DRIFT: lewat pin tanpa hambatan, meluncur santai ke tengah.
-      // Fase 1 parkir di segmen tetangga; easeOutCubic menembus garis masuk
-      // ("klek" tunggal) lalu meluncur lembut sampai ke tengah.
+      // 9 — SMOOTH_DRIFT: meluncur santai dari tetangga menembus garis + verdict:
+      //   break → lewat mulus ("klek" tunggal) sampai tengah.
+      //   rebound → sempat tertahan di garis: CLACK kecil + cekik mundur
+      //   sekilas (∝ benturan), lalu lanjut meluncur ke tengah.
       default: {
-        enqueue([
-          { dur: 1600, needle: 'tickvel', tickGap: 90, fn: s01 => {
-            const e = 1 - Math.pow(1 - s01, 3); // easeOutCubic
-            return anchor + (to - anchor) * e;
-          }, done: D },
-        ]);
+        if (pinVerdict === 'rebound') {
+          const c0 = to - arc * 0.5 + arc * 0.03; // sedikit lewat garis
+          const dip = arc * (0.05 + 0.08 * vHit);
+          const easeOut = (a, b) => s01 => a + (b - a) * (1 - Math.pow(1 - s01, 3));
+          enqueue([
+            { dur: 1200, needle: 'tickvel', tickGap: 90, fn: easeOut(anchor, c0), done: D },
+            { dur: 450, needle: 'vel', hit: vHit * 0.7, fn: easeOut(c0, c0 - dip), done: D },
+            { dur: 900, needle: 'tickvel', tickGap: 90, fn: easeOut(c0 - dip, to), done: D },
+          ]);
+        } else {
+          enqueue([
+            { dur: 1600, needle: 'tickvel', tickGap: 90, fn: s01 => {
+              const e = 1 - Math.pow(1 - s01, 3); // easeOutCubic
+              return anchor + (to - anchor) * e;
+            }, done: D },
+          ]);
+        }
         break;
       }
     }
