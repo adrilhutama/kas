@@ -49,6 +49,33 @@ async function getSummary(url, env) {
   ).first();
   const total_income = incomeRow?.total ?? 0;
   const total_expense = expenseRow?.total ?? 0;
+  const current_balance = total_income - total_expense;
+
+  // Active savings goal (nullable until migration is applied; old DBs keep working)
+  let goal = null;
+  try {
+    goal = await env.DB.prepare(
+      "SELECT id, title, target_amount, sibagi_url, external_funds FROM goals WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
+    ).first();
+  } catch {
+    goal = null; // table goals belum ada (belum migrate) -> goal tetap null
+  }
+  let goalView = null;
+  if (goal) {
+    const target = Number(goal.target_amount) || 0;
+    const ext = Number(goal.external_funds) || 0;
+    const total_collected = current_balance + ext;
+    goalView = {
+      id: goal.id,
+      title: goal.title,
+      target_amount: target,
+      sibagi_url: goal.sibagi_url || "",
+      external_funds: ext,
+      total_collected,
+      percentage: target > 0 ? Math.min(100, Math.round((total_collected / target) * 100)) : 0,
+      remaining: Math.max(0, target - total_collected),
+    };
+  }
 
   const membersRes = await env.DB.prepare(
     "SELECT id, name, is_active FROM members ORDER BY id ASC"
@@ -103,13 +130,14 @@ async function getSummary(url, env) {
   return json({
     total_income,
     total_expense,
-    current_balance: total_income - total_expense,
+    current_balance,
     month_fee: MONTH_FEE,
     months,
     available_months: available,
     per_month: perMonth,
     members: matrix,
     expenses: expRes.results || [],
+    goal: goalView,
   });
 }
 
@@ -153,6 +181,7 @@ export async function onRequest(context) {
       (method === "POST" && path === "expenses") ||
       (method === "DELETE" && path.startsWith("expenses/")) ||
       (method === "POST" && path === "members") ||
+      (method === "POST" && path === "goal/update") ||
       (method === "PATCH" && path.startsWith("members/"));
 
     if (needsAuth && !isAdmin(request, env)) {
@@ -263,6 +292,49 @@ export async function onRequest(context) {
         return json({ ok: true, id, is_active });
       }
       return json({ error: "Kirim { name } atau { id, is_active }." }, 400);
+    }
+
+    // --- Upsert savings goal (single active row) ---
+    // POST /api/goal/update { title, target_amount, sibagi_url, external_funds }
+    if (method === "POST" && path === "goal/update") {
+      let body = {};
+      try {
+        body = await request.json();
+      } catch {
+        return json({ error: "Body JSON tidak valid." }, 400);
+      }
+      const title = String(body.title || "").trim();
+      const target_amount = Number(body.target_amount);
+      const sibagi_url = String(body.sibagi_url || "").trim();
+      const external_funds = body.external_funds === undefined || body.external_funds === "" || body.external_funds === null
+        ? 0
+        : Number(body.external_funds);
+
+      if (!title) return json({ error: "Judul target wajib diisi." }, 400);
+      if (!Number.isInteger(target_amount) || target_amount <= 0)
+        return json({ error: "Target nominal harus angka > 0." }, 400);
+      if (!Number.isInteger(external_funds) || external_funds < 0)
+        return json({ error: "Dana luar harus angka ≥ 0." }, 400);
+      if (sibagi_url && !/^https?:\/\/.+/i.test(sibagi_url))
+        return json({ error: "URL Sibagi harus diawali http(s)://." }, 400);
+
+      const existing = await env.DB.prepare(
+        "SELECT id FROM goals WHERE is_active = 1 ORDER BY id DESC LIMIT 1"
+      ).first();
+      if (existing) {
+        await env.DB.prepare(
+          "UPDATE goals SET title = ?, target_amount = ?, sibagi_url = ?, external_funds = ? WHERE id = ?"
+        )
+          .bind(title, target_amount, sibagi_url, external_funds, existing.id)
+          .run();
+        return json({ ok: true, id: existing.id, updated: true });
+      }
+      const res = await env.DB.prepare(
+        "INSERT INTO goals (title, target_amount, sibagi_url, external_funds, is_active) VALUES (?, ?, ?, ?, 1)"
+      )
+        .bind(title, target_amount, sibagi_url, external_funds)
+        .run();
+      return json({ ok: true, id: res.meta?.last_row_id ?? null, updated: false });
     }
 
     return json({ error: "Not found." }, 404);

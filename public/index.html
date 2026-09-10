@@ -23,6 +23,8 @@
   summary::-webkit-details-marker { display: none; }
   #payChev { transition: transform .2s; display: inline-block; }
   details[open] #payChev { transform: rotate(180deg); }
+  /* savings goal progress bar */
+  #goalBar { transition: width .8s ease; }
 </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen">
@@ -86,6 +88,22 @@
 
     <!-- Per-month mini stats -->
     <section id="perMonth" class="flex flex-wrap gap-1.5 mb-4 text-xs"></section>
+
+    <!-- Savings goal -->
+    <section id="goalCard" class="hidden mb-6 bg-slate-800 border border-slate-700 rounded-xl p-4">
+      <h2 class="font-semibold mb-1 text-sm">🎯 <span id="goalTitle">Target Dana Bersama Regu</span></h2>
+      <div class="h-3.5 rounded-full bg-slate-900 border border-slate-700 overflow-hidden mb-2">
+        <div id="goalBar" class="h-full w-0 rounded-full bg-gradient-to-r from-emerald-500 to-amber-400"></div>
+      </div>
+      <div class="text-sm mb-1">Terkumpul: <span id="goalCollected" class="font-bold text-emerald-300">-</span>
+        <span class="text-slate-400">dari target <span id="goalTarget">-</span></span>
+        <span id="goalPct" class="ml-1 px-1.5 py-px rounded text-xs font-bold bg-amber-500/20 border border-amber-500/50 text-amber-300">0%</span>
+      </div>
+      <div id="goalSplit" class="text-[11px] text-slate-500 mb-2"></div>
+      <div id="goalRemain" class="text-xs mb-3"></div>
+      <a id="goalDonate" href="#" target="_blank" rel="noopener"
+        class="hidden w-full text-center bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl py-2.5 text-sm font-bold">🎁 Mau Kasih Lebih? Donasi via Sibagi.com</a>
+    </section>
 
     <!-- Matrix -->
     <section class="mb-6">
@@ -261,6 +279,35 @@ function render(d) {
     s.textContent = `${namaBulan(p.month)}: ${p.count} lunas (${rp(p.total)})${isNow ? ' • bulan ini' : ''}`;
     pm.appendChild(s);
   });
+
+  // savings goal card
+  const goalCard = document.getElementById('goalCard');
+  if (d.goal) {
+    const g = d.goal;
+    goalCard.classList.remove('hidden');
+    document.getElementById('goalTitle').textContent = g.title;
+    document.getElementById('goalBar').style.width = g.percentage + '%';
+    document.getElementById('goalCollected').textContent = rp(g.total_collected);
+    document.getElementById('goalTarget').textContent = rp(g.target_amount);
+    document.getElementById('goalPct').textContent = g.percentage + '%';
+    document.getElementById('goalSplit').textContent =
+      `(Kas Regu: ${rp(d.current_balance)} + Sibagi/Donasi: ${rp(g.external_funds)})`;
+    const remain = document.getElementById('goalRemain');
+    if (g.percentage >= 100) {
+      remain.innerHTML = '<span class="px-2 py-1 rounded-lg bg-emerald-900/60 border border-emerald-700 text-emerald-300 font-semibold">🎉 Target Telah Tercapai!</span>';
+    } else {
+      remain.innerHTML = `Kurang <span class="font-bold text-amber-300">${rp(g.remaining)}</span> lagi`;
+    }
+    const donate = document.getElementById('goalDonate');
+    if (g.sibagi_url) {
+      donate.href = g.sibagi_url;
+      donate.classList.remove('hidden');
+    } else {
+      donate.classList.add('hidden');
+    }
+  } else {
+    goalCard.classList.add('hidden');
+  }
 
   // matrix head (+ "Bulan Ini" badge on the current month, Total Bayar on the far right)
   const head = document.getElementById('mHead');

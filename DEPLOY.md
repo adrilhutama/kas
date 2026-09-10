@@ -35,6 +35,14 @@ wrangler d1 execute kas_regu_3 --command="SELECT COUNT(*) AS members FROM member
 # ekspektasi: members=13, payments=36, expense=120000
 ```
 
+## 3b. Migrasi fitur Target Dana (goals) — untuk DB yang sudah live
+```bash
+wrangler d1 execute kas_regu_3 --file=./migrate_goals.sql
+# verifikasi:
+wrangler d1 execute kas_regu_3 --command="SELECT id, title, target_amount, external_funds FROM goals WHERE is_active = 1;"
+```
+> Idempotent (aman di-run ulang, tidak duplikat seed). DB fresh dari `schema.sql` terbaru tidak perlu langkah ini.
+
 ## 4. Deploy via Cloudflare Pages (GitHub integration)
 1. Cloudflare Dashboard → **Workers & Pages** → **Create** → **Pages** → **Connect to Git** → pilih repo `kas-regu-3`.
 2. Build settings:

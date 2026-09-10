@@ -72,3 +72,17 @@ INSERT INTO payments (member_id, month_period, amount) VALUES
 INSERT INTO expenses (description, amount, expense_date) VALUES
   ('Beli kado untuk anaknya Reza', 70000, '2026-08-10'),
   ('Kasih ke Bayu', 50000, '2026-08-25');
+
+CREATE TABLE IF NOT EXISTS goals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  title TEXT NOT NULL,
+  target_amount INTEGER NOT NULL,
+  sibagi_url TEXT DEFAULT '',
+  external_funds INTEGER DEFAULT 0,
+  is_active INTEGER DEFAULT 1,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Seed savings goal (admin bisa ubah via dashboard; ganti sibagi_url dengan akun asli)
+INSERT INTO goals (title, target_amount, sibagi_url, external_funds, is_active)
+VALUES ('Target Kas & Acara Akhir Tahun', 1000000, 'https://sibagi.com/username_anda', 0, 1);

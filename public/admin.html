@@ -77,6 +77,23 @@
       </div>
     </section>
 
+    <!-- Savings goal settings -->
+    <section class="mb-6">
+      <h2 class="font-semibold mb-2 text-sm">🎯 Pengaturan Target &amp; Sibagi</h2>
+      <form id="fGoal" class="bg-slate-800 border border-slate-700 rounded-xl p-3 grid gap-2">
+        <input id="goalTitleIn" placeholder="Nama/Judul Target (cth: Acara Makan Regu)" required
+          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+        <input id="goalTargetIn" type="number" min="1" step="1000" placeholder="Target Nominal (Rp)" required
+          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+        <input id="goalUrlIn" type="url" placeholder="URL Sibagi (cth: https://sibagi.com/nama_akun)"
+          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+        <input id="goalExtIn" type="number" min="0" step="1000" placeholder="Total Donasi Sibagi / Dana Luar (Rp)"
+          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+        <button class="bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg py-2 text-sm font-bold">💾 Simpan Target &amp; Sibagi</button>
+        <p id="goalMsg" class="hidden text-xs"></p>
+      </form>
+    </section>
+
     <!-- Expenses -->
     <section class="mb-6">
       <h2 class="font-semibold mb-2 text-sm">🧾 Pengeluaran</h2>
@@ -122,6 +139,7 @@ let ALL_MONTHS = [];
 let ACTIVE = [];
 let DATA = null;
 let SHOW_UNPAID_ONLY = false;
+let GOAL_PREFILLED = false;
 
 function unpaidList(d) {
   return (d.members || []).filter(m => !m.paid[THIS_MONTH]);
@@ -248,6 +266,15 @@ function render() {
     };
     chips.appendChild(b);
   });
+
+  // prefill goal form once (don't clobber typing on re-renders)
+  if (!GOAL_PREFILLED && d.goal) {
+    document.getElementById('goalTitleIn').value = d.goal.title || '';
+    document.getElementById('goalTargetIn').value = d.goal.target_amount || '';
+    document.getElementById('goalUrlIn').value = d.goal.sibagi_url || '';
+    document.getElementById('goalExtIn').value = d.goal.external_funds || '';
+    GOAL_PREFILLED = true;
+  }
 
   // matrix (+ "Bulan Ini" badge on the current month, Total Bayar on the far right)
   document.getElementById('mHead').innerHTML =
@@ -431,6 +458,36 @@ document.getElementById('fMem').onsubmit = async e => {
   if (r.status === 401) return logout();
   if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menambah.'); }
   document.getElementById('memName').value = '';
+  load();
+};
+
+document.getElementById('fGoal').onsubmit = async e => {
+  e.preventDefault();
+  showErr(null);
+  const msg = document.getElementById('goalMsg');
+  msg.classList.add('hidden');
+  const r = await fetch('/api/goal/update', {
+    method: 'POST', headers: auth(),
+    body: JSON.stringify({
+      title: document.getElementById('goalTitleIn').value.trim(),
+      target_amount: Number(document.getElementById('goalTargetIn').value),
+      sibagi_url: document.getElementById('goalUrlIn').value.trim(),
+      external_funds: Number(document.getElementById('goalExtIn').value || 0)
+    })
+  });
+  if (r.status === 401) return logout();
+  let t = {};
+  try { t = await r.json(); } catch {}
+  if (!r.ok) {
+    msg.textContent = t.error || 'Gagal menyimpan.';
+    msg.className = 'text-xs text-rose-400';
+    msg.classList.remove('hidden');
+    return;
+  }
+  GOAL_PREFILLED = true; // keep typed values; don't clobber on re-sync
+  msg.textContent = '✓ Target & Sibagi tersimpan!';
+  msg.className = 'text-xs text-emerald-300';
+  msg.classList.remove('hidden');
   load();
 };
 
