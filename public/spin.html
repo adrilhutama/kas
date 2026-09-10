@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Roda Backup Libur — Regu 3</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#0f172a" />
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<style>
+  body { -webkit-tap-highlight-color: transparent; }
+  #wheel { filter: drop-shadow(0 0 24px rgb(16 185 129 / .15)); }
+  #pointerKick { transition: transform .08s; transform-origin: 50% 0; }
+  .chk { accent-color: #10b981; width: 1.1rem; height: 1.1rem; }
+  #confettiCv { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
+  @keyframes popIn { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  #winModal.open .modal-box { animation: popIn .25s ease-out; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+<!-- subtle top glow -->
+<div class="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-emerald-950/50 via-slate-950/20 to-transparent"></div>
+<canvas id="confettiCv" class="hidden"></canvas>
+<div class="relative max-w-md mx-auto px-4 pb-16">
+
+  <header class="pt-6 pb-4 flex items-start justify-between gap-3">
+    <div>
+      <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-widest uppercase bg-slate-800/80 border border-slate-700/70 text-slate-400">Regu 3 &bull; Undian Backup</span>
+      <h1 class="mt-2 text-2xl font-extrabold tracking-tight">🎡 Roda Backup Libur</h1>
+      <p class="text-slate-400 text-xs mt-1">Putar roda untuk menentukan personil backup secara transparan.</p>
+    </div>
+    <a href="/" class="shrink-0 mt-1 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-slate-700/70 bg-slate-900/60 text-slate-400 hover:text-emerald-300 hover:border-emerald-700/60">← Kas</a>
+  </header>
+
+  <div id="err" class="hidden mb-3 p-3 rounded-2xl bg-rose-950/60 border border-rose-800/60 text-rose-200 text-sm"></div>
+
+  <!-- Wheel -->
+  <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
+    <div class="relative mx-auto w-full max-w-[360px]">
+      <div id="pointerKick" class="absolute left-1/2 -translate-x-1/2 -top-1 z-10 text-3xl">🔻</div>
+      <canvas id="wheel" width="640" height="640" class="w-full h-auto"></canvas>
+    </div>
+    <button id="btnSpin" class="w-full mt-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl py-3 text-base font-extrabold tracking-wide">PUTAR RODA</button>
+    <p id="spinHint" class="text-center text-[11px] text-slate-500 mt-1.5">Mode: <span id="modeLabel" class="text-slate-300">🎲 Murni Acak</span></p>
+  </section>
+
+  <!-- Admin mode -->
+  <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
+    <h2 class="font-semibold mb-2 text-sm border-l-2 border-amber-500 pl-2.5">🔐 Admin Mode</h2>
+    <div class="flex gap-1.5 mb-3">
+      <button id="modeFair" class="flex-1 px-2 py-2 rounded-xl text-xs font-bold border bg-emerald-600 border-emerald-500 text-white">🎲 Murni Acak</button>
+      <button id="modeTarget" class="flex-1 px-2 py-2 rounded-xl text-xs font-bold border bg-slate-800 border-slate-700 text-slate-400">🎯 Tentukan Target</button>
+    </div>
+    <div id="unlockBox" class="hidden grid gap-2">
+      <input id="adminPw" type="password" placeholder="Password admin untuk mode target" autocomplete="off"
+        class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-amber-500" />
+      <button id="btnUnlock" class="border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 rounded-xl py-2 text-xs font-bold">🔓 Buka Kunci Mode Target</button>
+      <p id="unlockErr" class="hidden text-rose-400 text-xs"></p>
+    </div>
+    <div id="targetBox" class="hidden grid gap-2">
+      <label class="text-xs text-slate-400">Personil yang HARUS terpilih:</label>
+      <select id="targetSel" class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-amber-500"></select>
+      <p class="text-[11px] text-slate-500">Roda tetap berputar natural beberapa putaran lalu mendarat di target. Penonton tidak akan tahu.</p>
+    </div>
+  </section>
+
+  <!-- Name checklist -->
+  <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="font-semibold text-sm border-l-2 border-emerald-500 pl-2.5">✅ Ikut Putaran (<span id="countIn">0</span>)</h2>
+      <button id="btnResetNames" class="text-[11px] px-2.5 py-1 rounded-full border border-slate-700/70 bg-slate-800/60 text-slate-400">Reset</button>
+    </div>
+    <div id="nameList" class="grid grid-cols-2 gap-1.5 text-sm"></div>
+    <form id="fAdd" class="flex gap-2 mt-3">
+      <input id="addName" placeholder="Tambah personil bantuan…" maxlength="24"
+        class="flex-1 bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
+      <button class="bg-emerald-600 hover:bg-emerald-500 rounded-xl px-4 py-2.5 text-sm font-semibold">+</button>
+    </form>
+  </section>
+
+  <footer class="text-center text-[11px] text-slate-600">
+    Roda Backup Libur — Regu 3 &bull; <a href="/" class="hover:text-emerald-400">Kas Regu 3</a>
+  </footer>
+</div>
+
+<!-- Winner modal -->
+<div id="winModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+  <div class="modal-box w-full max-w-sm rounded-2xl border border-amber-500/40 bg-slate-900 p-5 text-center">
+    <div class="text-4xl mb-2">🚨</div>
+    <div class="text-xs uppercase tracking-widest text-slate-400 mb-1">Personil Terpilih Backup</div>
+    <div id="winName" class="text-2xl font-extrabold text-amber-300 mb-4">-</div>
+    <div class="grid gap-2">
+      <button id="btnScratch" class="border border-slate-700/70 bg-slate-800/60 hover:bg-slate-700/60 rounded-xl py-2.5 text-sm font-semibold">❌ Coret dari Putaran Berikutnya</button>
+      <button id="btnCopyWin" class="bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 text-sm font-bold">📋 Salin Hasil ke WA</button>
+      <button id="btnCloseWin" class="text-slate-500 hover:text-slate-300 text-xs py-1">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
+const BULAN_FULL = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const PALETTE = ['#10b981','#0ea5e9','#f59e0b','#ef4444','#8b5cf6','#ec4899','#14b8a6','#f97316','#6366f1','#eab308','#06b6d4','#f43f5e','#84cc16'];
+const POINTER = -Math.PI / 2; // needle at 12 o'clock
+const TAU = Math.PI * 2;
+
+let names = [];        // {id, name, in} — in = ikut putaran
+let rot = 0;           // current wheel rotation (radians)
+let spinning = false;
+let mode = 'fair';     // 'fair' | 'target'
+let unlocked = sessionStorage.getItem('spin_unlocked') === '1';
+let lastWinner = null;
+
+const cv = document.getElementById('wheel');
+const ctx = cv.getContext('2d');
+const showErr = msg => {
+  const e = document.getElementById('err');
+  if (!msg) { e.classList.add('hidden'); return; }
+  e.textContent = msg; e.classList.remove('hidden');
+};
+
+// ---------- Audio (Web Audio API, no files) ----------
+let AC = null;
+const ac = () => (AC || (AC = new (window.AudioContext || window.webkitAudioContext)()));
+function tickSound() {
+  try {
+    const c = ac(), o = c.createOscillator(), g = c.createGain();
+    o.type = 'square'; o.frequency.value = 2200;
+    g.gain.setValueAtTime(0.06, c.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, c.currentTime + 0.03);
+    o.connect(g); g.connect(c.destination);
+    o.start(); o.stop(c.currentTime + 0.035);
+  } catch {}
+}
+function fanfare() {
+  try {
+    const c = ac();
+    [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => {
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      const t = c.currentTime + i * 0.14;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+      o.connect(g); g.connect(c.destination);
+      o.start(t); o.stop(t + 0.4);
+    });
+  } catch {}
+}
+
+// ---------- Confetti (tiny inline implementation) ----------
+function confetti() {
+  const c = document.getElementById('confettiCv');
+  c.classList.remove('hidden');
+  c.width = innerWidth; c.height = innerHeight;
+  const x = c.getContext('2d');
+  const P = Array.from({ length: 160 }, () => ({
+    x: Math.random() * c.width, y: -20 - Math.random() * c.height * 0.3,
+    w: 5 + Math.random() * 6, h: 8 + Math.random() * 8,
+    vy: 2 + Math.random() * 3, vx: -1.5 + Math.random() * 3,
+    r: Math.random() * Math.PI, vr: -0.2 + Math.random() * 0.4,
+    col: PALETTE[(Math.random() * PALETTE.length) | 0],
+  }));
+  const t0 = performance.now();
+  (function frame(t) {
+    const el = (t - t0) / 1000;
+    x.clearRect(0, 0, c.width, c.height);
+    P.forEach(p => {
+      p.x += p.vx; p.y += p.vy; p.r += p.vr;
+      x.save(); x.translate(p.x, p.y); x.rotate(p.r);
+      x.globalAlpha = Math.max(0, 1 - el / 3.2);
+      x.fillStyle = p.col; x.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      x.restore();
+    });
+    if (el < 3.2) requestAnimationFrame(frame);
+    else c.classList.add('hidden');
+  })(t0);
+}
+
+// ---------- Wheel math ----------
+const norm = a => ((a % TAU) + TAU) % TAU;
+const activeNames = () => names.filter(n => n.in);
+function idxUnderPointer(r) {
+  const list = activeNames();
+  if (!list.length) return -1;
+  return Math.floor(norm(POINTER - r) / (TAU / list.length)) % list.length;
+}
+
+function drawWheel(highlight = -1) {
+  const list = activeNames();
+  const W = cv.width, cx = W / 2, cy = W / 2, R = W / 2 - 8;
+  ctx.clearRect(0, 0, W, W);
+  if (!list.length) {
+    ctx.fillStyle = '#1e293b';
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#64748b'; ctx.font = 'bold 26px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText('Centang nama dulu', cx, cy);
+    return;
+  }
+  const arc = TAU / list.length;
+  list.forEach((n, i) => {
+    const a0 = rot + i * arc, a1 = a0 + arc;
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0, a1); ctx.closePath();
+    ctx.fillStyle = PALETTE[i % PALETTE.length];
+    ctx.fill();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#020617'; ctx.stroke();
+    if (i === highlight) {
+      ctx.save();
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, a0, a1); ctx.closePath();
+      ctx.fillStyle = 'rgb(255 255 255 / .25)'; ctx.fill();
+      ctx.restore();
+    }
+    // label along radius
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(a0 + arc / 2);
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.font = `bold ${list.length > 10 ? 20 : 24}px system-ui`;
+    ctx.fillStyle = '#020617';
+    const label = n.name.length > 12 ? n.name.slice(0, 11) + '…' : n.name;
+    ctx.fillText(label, R - 14, 0);
+    ctx.restore();
+  });
+  // hub
+  ctx.beginPath(); ctx.arc(cx, cy, 34, 0, TAU);
+  ctx.fillStyle = '#0f172a'; ctx.fill();
+  ctx.lineWidth = 4; ctx.strokeStyle = '#10b981'; ctx.stroke();
+  ctx.fillStyle = '#f59e0b'; ctx.font = 'bold 30px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('★', cx, cy + 2);
+}
+
+// ---------- Spin ----------
+function spinToIndex(k) {
+  const list = activeNames();
+  const arc = TAU / list.length;
+  // align center of segment k with the pointer, after several full turns
+  const delta = norm(POINTER - (rot + (k + 0.5) * arc));
+  const turns = 6 + Math.floor(Math.random() * 3); // 6–8 putaran penuh
+  const from = rot, to = rot + turns * TAU + delta;
+  const dur = 6000 + Math.random() * 1500;
+  const btn = document.getElementById('btnSpin');
+  btn.disabled = true;
+  spinning = true;
+  const t0 = performance.now();
+  let lastIdx = idxUnderPointer(from), lastTick = 0;
+  const kick = document.getElementById('pointerKick');
+  (function frame(t) {
+    const p = Math.min(1, (t - t0) / dur);
+    const eased = 1 - Math.pow(1 - p, 5); // easeOutQuint: kencang lalu melambat
+    rot = from + (to - from) * eased;
+    const idx = idxUnderPointer(rot);
+    if (idx !== lastIdx) {
+      lastIdx = idx;
+      if (t - lastTick > 40) { // throttle tick saat kecepatan tinggi
+        lastTick = t;
+        tickSound();
+        kick.style.transform = 'translateX(-50%) rotate(18deg)';
+        setTimeout(() => { kick.style.transform = 'translateX(-50%)'; }, 80);
+      }
+    }
+    drawWheel(idx);
+    if (p < 1) requestAnimationFrame(frame);
+    else {
+      rot = norm(to);
+      spinning = false;
+      btn.disabled = false;
+      finish(idx);
+    }
+  })(t0);
+}
+
+function doSpin() {
+  showErr(null);
+  if (spinning) return;
+  const list = activeNames();
+  if (list.length < 2) {
+    showErr('Centang minimal 2 nama untuk memutar roda.');
+    return;
+  }
+  let k;
+  if (mode === 'target') {
+    const tid = document.getElementById('targetSel').value;
+    k = list.findIndex(n => String(n.id) === String(tid));
+    if (k < 0) {
+      showErr('Target tidak ikut putaran (mungkin ter-coret). Pilih target lain atau kembalikan ke Murni Acak.');
+      return;
+    }
+  } else {
+    k = Math.floor(Math.random() * list.length); // murni acak
+  }
+  document.getElementById('winModal').classList.add('hidden');
+  document.getElementById('winModal').classList.remove('open');
+  spinToIndex(k);
+}
+
+function finish(idx) {
+  const list = activeNames();
+  const w = list[idx];
+  if (!w) return;
+  lastWinner = w;
+  drawWheel(idx);
+  fanfare();
+  confetti();
+  document.getElementById('winName').textContent = w.name;
+  const m = document.getElementById('winModal');
+  m.classList.remove('hidden'); m.classList.add('open');
+}
+
+async function copyText(t) {
+  try { await navigator.clipboard.writeText(t); return true; }
+  catch {
+    const ta = document.createElement('textarea');
+    ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand('copy'); } catch {}
+    ta.remove();
+    return ok;
+  }
+}
+
+function buildWinText() {
+  if (!lastWinner) return '';
+  const d = new Date();
+  return [
+    '🚨 HASIL UNDIAN BACKUP LIBUR - REGU 3',
+    `Tanggal: ${HARI[d.getDay()]}, ${d.getDate()} ${BULAN_FULL[d.getMonth()]} ${d.getFullYear()}`,
+    `Personil Terpilih: 👉 ${lastWinner.name} 👈`,
+    '',
+    'Hasil putaran roda transparan:',
+    `👉 ${location.origin}/spin.html`,
+  ].join('\n');
+}
+
+// ---------- Names ----------
+function renderNames() {
+  const box = document.getElementById('nameList');
+  box.innerHTML = '';
+  names.forEach(n => {
+    const lab = document.createElement('label');
+    lab.className = 'flex items-center gap-2 px-2.5 py-2 rounded-xl border cursor-pointer ' +
+      (n.in ? 'border-slate-700/70 bg-slate-800/60' : 'border-slate-800/50 bg-slate-950/60 text-slate-500');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox'; cb.checked = n.in; cb.className = 'chk';
+    cb.onchange = () => { n.in = cb.checked; renderNames(); drawWheel(); syncTargetSel(); };
+    const sp = document.createElement('span');
+    sp.textContent = n.name;
+    lab.appendChild(cb); lab.appendChild(sp);
+    box.appendChild(lab);
+  });
+  document.getElementById('countIn').textContent = activeNames().length;
+  document.getElementById('btnSpin').disabled = activeNames().length < 2 || spinning;
+}
+
+function syncTargetSel() {
+  const sel = document.getElementById('targetSel');
+  const prev = sel.value;
+  sel.innerHTML = '';
+  activeNames().forEach(n => {
+    const o = document.createElement('option');
+    o.value = n.id; o.textContent = n.name;
+    sel.appendChild(o);
+  });
+  if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+async function loadNames() {
+  try {
+    const r = await fetch('/api/summary');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    names = (d.members || []).map(m => ({ id: m.id, name: m.name, in: m.is_active === 1 }));
+    if (!names.length) throw new Error('daftar anggota kosong');
+  } catch (e) {
+    showErr('Gagal memuat daftar anggota: ' + e.message + ' — roda memakai daftar cadangan.');
+    names = ['HEDY','ADRIL','ILHAM','SANDI','SANIA','HERMAN','RAKA','BAYU','SUGENG','SUTISNA','RIDWAN SOLO','INDRA','RIDWAN PKD']
+      .map((n, i) => ({ id: 'fb-' + i, name: n, in: true }));
+  }
+  renderNames(); drawWheel(); syncTargetSel();
+}
+
+// ---------- Admin mode ----------
+function setMode(m) {
+  mode = m;
+  const fair = m === 'fair';
+  document.getElementById('modeFair').className = 'flex-1 px-2 py-2 rounded-xl text-xs font-bold border ' +
+    (fair ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400');
+  document.getElementById('modeTarget').className = 'flex-1 px-2 py-2 rounded-xl text-xs font-bold border ' +
+    (!fair ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-400');
+  document.getElementById('modeLabel').textContent = fair ? '🎲 Murni Acak' : '🎯 Ditentukan Admin';
+  document.getElementById('unlockBox').classList.toggle('hidden', fair || unlocked);
+  document.getElementById('targetBox').classList.toggle('hidden', fair || !unlocked);
+  if (!fair && unlocked) syncTargetSel();
+}
+
+async function unlock() {
+  const pw = document.getElementById('adminPw').value;
+  const ue = document.getElementById('unlockErr');
+  ue.classList.add('hidden');
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    if (!r.ok) throw new Error((await r.json()).error || 'PIN salah');
+    unlocked = true;
+    sessionStorage.setItem('spin_unlocked', '1');
+    document.getElementById('adminPw').value = '';
+    setMode('target');
+  } catch (e) { ue.textContent = e.message; ue.classList.remove('hidden'); }
+}
+
+// ---------- Events ----------
+document.getElementById('btnSpin').onclick = doSpin;
+document.getElementById('modeFair').onclick = () => setMode('fair');
+document.getElementById('modeTarget').onclick = () => setMode('target');
+document.getElementById('btnUnlock').onclick = unlock;
+document.getElementById('adminPw').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+document.getElementById('btnResetNames').onclick = () => {
+  names = names.filter(n => !String(n.id).startsWith('x-'));
+  names.forEach(n => { n.in = true; });
+  renderNames(); drawWheel(); syncTargetSel();
+};
+document.getElementById('fAdd').onsubmit = e => {
+  e.preventDefault();
+  const inp = document.getElementById('addName');
+  const v = inp.value.trim().toUpperCase();
+  if (!v) return;
+  names.push({ id: 'x-' + Date.now(), name: v, in: true });
+  inp.value = '';
+  renderNames(); drawWheel(); syncTargetSel();
+};
+document.getElementById('btnScratch').onclick = () => {
+  if (lastWinner) {
+    const n = names.find(x => String(x.id) === String(lastWinner.id));
+    if (n) n.in = false;
+    renderNames(); drawWheel(); syncTargetSel();
+  }
+  document.getElementById('winModal').classList.add('hidden');
+  document.getElementById('winModal').classList.remove('open');
+};
+document.getElementById('btnCopyWin').onclick = async e => {
+  const ok = await copyText(buildWinText());
+  if (ok) {
+    const b = e.currentTarget, orig = b.textContent;
+    b.textContent = '✓ Tersalin ke Clipboard!';
+    setTimeout(() => { b.textContent = orig; }, 1800);
+  }
+};
+document.getElementById('btnCloseWin').onclick = () => {
+  document.getElementById('winModal').classList.add('hidden');
+  document.getElementById('winModal').classList.remove('open');
+};
+
+setMode('fair');
+loadNames();
+
+// PWA: register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}
+</script>
+</body>
+</html>

@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>KAS REGU 3 — Kas Tim</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#0f172a" />
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <style>
   body { -webkit-tap-highlight-color: transparent; }
   .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -44,7 +50,10 @@
       <h1 class="mt-2 text-2xl font-extrabold tracking-tight">Kas Regu 3</h1>
       <p class="text-slate-400 text-xs mt-1 tabular-nums">Iuran Rp 10.000 / orang / bulan &bull; sejak Jul 2026</p>
     </div>
-    <a href="/admin.html" title="Admin" class="shrink-0 mt-1 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-slate-700/70 bg-slate-900/60 text-slate-400 hover:text-emerald-300 hover:border-emerald-700/60">🔒 Admin</a>
+    <div class="shrink-0 mt-1 flex flex-col items-end gap-1.5">
+      <a href="/admin.html" title="Admin" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-slate-700/70 bg-slate-900/60 text-slate-400 hover:text-emerald-300 hover:border-emerald-700/60">🔒 Admin</a>
+      <a href="/spin.html" title="Roda Backup Libur" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20">🎡 Roda Backup</a>
+    </div>
   </header>
 
   <!-- Error / loading -->
@@ -374,6 +383,11 @@ document.getElementById('pillUnpaid').onclick = () => {
   SHOW_UNPAID_ONLY = true;
   if (CURRENT) render(CURRENT);
 };
+
+// PWA: register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}
 </script>
 </body>
 </html>

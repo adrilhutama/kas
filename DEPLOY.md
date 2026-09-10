@@ -7,11 +7,13 @@
 ## 1. Struktur repo
 ```
 kas-regu-3/
-├── schema.sql
+├── schema.sql (+ migrate_goals.sql untuk DB live lama)
 ├── wrangler.toml
 ├── functions/api/[[path]].js
 ├── public/index.html
-└── public/admin.html
+├── public/admin.html
+├── public/spin.html
+├── public/manifest.json + public/sw.js + public/icon.svg + public/icons/
 ```
 
 ## 2. Push ke GitHub

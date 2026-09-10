@@ -8,8 +8,10 @@ KAS REGU 3 — a cash/dues tracker for a 13-person team. Static dark-mode pages 
 
 ## Files (the whole app)
 
-- `public/index.html` — public read-only view (matrix, expenses, WA share, payment accordion)
-- `public/admin.html` — admin dashboard behind a login barrier (toggle payments, CRUD expenses/members)
+- `public/index.html` — public read-only view (stats, payment accordion, savings goal, matrix, expenses)
+- `public/admin.html` — admin dashboard behind a login barrier (WA recap share, toggle payments, CRUD expenses/members/goal)
+- `public/spin.html` — "Roda Backup Libur" spinning wheel (canvas, Web Audio FX, fair vs admin-target modes, winner modal + WA copy)
+- `public/manifest.json` + `public/sw.js` + `public/icon.svg` + `public/icons/` — PWA shell (installable; SW caches app shell only, never `/api/*`)
 - `functions/api/[[path]].js` — the entire backend: one catch-all router for all `/api/*` routes
 - `schema.sql` — DDL + seed data (13 members, dues Rp 10.000/mo from 2026-07)
 - `wrangler.toml` — Pages + D1 binding (`DB`); `database_id` already filled in

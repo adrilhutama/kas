@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>KAS REGU 3 — Admin</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="manifest" href="/manifest.json" />
+<meta name="theme-color" content="#0f172a" />
+<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+<link rel="apple-touch-icon" href="/icons/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <style>
   .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table.matrix th:first-child, table.matrix td:first-child {
@@ -34,7 +40,10 @@
       <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-widest uppercase bg-slate-800/80 border border-slate-700/70 text-slate-400">Regu 3 &bull; Admin Panel</span>
       <h1 class="mt-2 text-2xl font-extrabold tracking-tight">🔐 Kelola Kas</h1>
     </div>
-    <a href="/" class="shrink-0 mt-1 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-slate-700/70 bg-slate-900/60 text-slate-400 hover:text-emerald-300 hover:border-emerald-700/60">← Publik</a>
+    <div class="shrink-0 mt-1 flex flex-col items-end gap-1.5">
+      <a href="/" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-slate-700/70 bg-slate-900/60 text-slate-400 hover:text-emerald-300 hover:border-emerald-700/60">← Publik</a>
+      <a href="/spin.html" title="Roda Backup Libur" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20">🎡 Roda Backup</a>
+    </div>
   </header>
 
   <!-- Login barrier -->
@@ -497,6 +506,11 @@ document.getElementById('fGoal').onsubmit = async e => {
 };
 
 if (TOKEN) enter();
+
+// PWA: register service worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}
 </script>
 </body>
 </html>
