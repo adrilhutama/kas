@@ -240,7 +240,11 @@ function drawWheel(highlight = -1) {
   ctx.fillText('★', cx, cy + 2);
 }
 
-// ---------- Spin: realistic ratchet physics (overshoot + spring recoil) ----------
+// ---------- Spin: realistic ratchet physics, 2 random tease resolutions ----------
+// Tiap putaran acak 50:50 —
+//  'recoil': nyaris lolos ke depan, lalu membal balik ke pemenang (existing).
+//  'escape': tersangkut di perbatasan, lalu "klek!" tersentak lolos maju ke pemenang.
+// Kedua skenario berhenti TEPAT di tengah segmen k, jadi stealth target 100% akurat.
 let settling = false; // true during the final spring-settle phase
 let kickGen = 0;      // invalidates stale flipper snap-back timeouts
 
@@ -263,14 +267,18 @@ function spinToIndex(k) {
   const delta = norm(POINTER - (rot + (k + 0.5) * arc));
   const turns = 6 + Math.floor(Math.random() * 3); // 6–8 putaran penuh
   const from = rot, to = from + turns * TAU + delta;
-  // overshoot: wheel pushes just past center toward the boundary (looks like
-  // it nearly escapes to the neighbour), then a damped spring pulls it back
-  // to settle EXACTLY on the winner — locked targets stay 100% accurate
-  const overshoot = arc * (0.28 + Math.random() * 0.12); // ~8-11 derajat utk 13 nama
-  const peak = to + overshoot;
+  // Tease resolution acak 50:50 per putaran — keduanya berhenti TEPAT di
+  // tengah segmen k, jadi stealth target 100% akurat apa pun skenarionya:
+  //  'recoil': dorong lewat tengah ke arah garis keluar, lalu pegas membal balik.
+  //  'escape': parkir tepat sebelum garis masuk, tertahan, lalu "klek!" lolos maju.
+  const scenario = Math.random() < 0.5 ? 'recoil' : 'escape';
+  const OMEGA = 13, ZETA = 0.22; // pegas ~2 Hz
   const durSpin = 5500 + Math.random() * 1200;
-  const durSettle = 1200; // ms of spring recoil
-  const OMEGA = 13, ZETA = 0.22; // ~2 Hz wobble, fully decayed in ~1.2 s
+  const overshoot = arc * (0.28 + Math.random() * 0.12); // recoil: ~8-11 derajat utk 13 nama
+  const peak = to + overshoot;
+  const stickBack = arc * (0.52 + Math.random() * 0.06); // escape: parkir di tetangga, nempel garis masuk
+  const stick = to - stickBack;
+  const travel = to - stick; // jarak sentakan: titik tertahan → tengah segmen k
 
   const btn = document.getElementById('btnSpin');
   btn.disabled = true;
@@ -283,12 +291,40 @@ function spinToIndex(k) {
   let lastIdx = idxUnderPointer(from), lastTick = 0;
   const kick = document.getElementById('pointerKick');
 
-  // ---- phase 1: fast spin easing out to just PAST the winner ----
+  // flipper digerakkan kecepatan roda selama fase pegas
+  const flipState = { prev: 0, pt: 0 };
+  function springFlipper(s) {
+    const dt = Math.max(1, s - (flipState.pt || s));
+    flipState.pt = s;
+    const vel = (rot - flipState.prev) / (dt / 1000); // rad/s
+    flipState.prev = rot;
+    const deg = Math.max(-26, Math.min(26, -vel * 12));
+    kick.style.transform = `translateX(-50%) rotate(${deg.toFixed(1)}deg)`;
+  }
+
+  // pemenang = posisi akhir roda berhenti (resolve by id agar tahan edit checklist)
+  function endSpin() {
+    rot = norm(to);
+    settling = false;
+    spinning = false;
+    btn.disabled = false;
+    kick.style.transform = 'translateX(-50%)';
+    const fl = activeNames();
+    let fi = winnerId !== null ? fl.findIndex(n => String(n.id) === String(winnerId)) : -1;
+    if (fi < 0) fi = Math.max(0, Math.min(k, fl.length - 1));
+    finish(fi);
+  }
+
+  // ---- phase 1: fast spin easing out to the tease point ----
+  // recoil → sedikit LEWAT tengah (nyaris lolos keluar), escape → parkir
+  // tepat SEBELUM garis masuk (nyaris berhenti di tetangga)
+  const phase1End = scenario === 'recoil' ? peak : stick;
+  const phase1Next = s => { (scenario === 'recoil' ? frameRecoil : frameHesitate)(s); };
   (function frameSpin(t) {
     if (myGen !== kickGen) return; // superseded
     const p = Math.min(1, (t - t0) / durSpin);
     const eased = 1 - Math.pow(1 - p, 5); // easeOutQuint: kencang lalu melambat
-    rot = from + (peak - from) * eased;
+    rot = from + (phase1End - from) * eased;
     const idx = idxUnderPointer(rot);
     if (idx !== lastIdx) {
       lastIdx = idx;
@@ -300,44 +336,68 @@ function spinToIndex(k) {
     }
     drawWheel(idx);
     if (p < 1) requestAnimationFrame(frameSpin);
-    else frameSettle(performance.now());
+    else phase1Next(performance.now());
   })(t0);
 
-  // ---- phase 2: damped spring recoil, settles exactly on `to` ----
-  let sPrev = peak, sPt = 0, sLastTick = 0;
-  function frameSettle(s) {
+  // ---- phase 2a (recoil): damped spring, settles exactly on `to` ----
+  const durSettle = 1200; // ms of spring recoil
+  let sPt = 0, sLastTick = 0;
+  function frameRecoil(s) {
     if (myGen !== kickGen) return;
-    if (!sPt) { sPt = s; sPrev = peak; }
+    if (!sPt) { sPt = s; flipState.prev = peak; flipState.pt = 0; }
     settling = true;
     const st = (s - sPt) / 1000;
     const damp = Math.exp(-ZETA * OMEGA * st);
     rot = to + overshoot * damp * Math.cos(OMEGA * st);
-    // flipper vibrates against the spring motion (opposes the velocity)
-    const dt = Math.max(1, s - (frameSettle._pt || s));
-    frameSettle._pt = s;
-    const vel = (rot - sPrev) / (dt / 1000); // rad/s
-    sPrev = rot;
-    const deg = Math.max(-26, Math.min(26, -vel * 12));
-    kick.style.transform = `translateX(-50%) rotate(${deg.toFixed(1)}deg)`;
+    springFlipper(s);
     const idx = idxUnderPointer(rot);
     if (idx !== lastIdx) {
       lastIdx = idx;
       if (s - sLastTick > 90) { sLastTick = s; tickSound(); } // rattle on boundary graze
     }
     drawWheel(idx);
-    if (st * 1000 < durSettle) requestAnimationFrame(frameSettle);
-    else {
-      rot = norm(to);
-      settling = false;
-      spinning = false;
-      btn.disabled = false;
-      kick.style.transform = 'translateX(-50%)';
-      // resolve winner by id so a mid-spin checklist edit can't shift the result
-      const fl = activeNames();
-      let fi = winnerId !== null ? fl.findIndex(n => String(n.id) === String(winnerId)) : -1;
-      if (fi < 0) fi = Math.max(0, Math.min(k, fl.length - 1));
-      finish(fi);
+    if (st * 1000 < durSettle) requestAnimationFrame(frameRecoil);
+    else endSpin();
+  }
+
+  // ---- phase 2b (escape): hesitate at the boundary, "klek!" snaps forward ----
+  const durHesitate = 700 + Math.random() * 500; // tersangkut, nyaris berhenti
+  const durSnap = 900; // sentakan + satu getaran, menetap di tengah k
+  let hPt = 0, snapPt = 0, snapLastTick = 0;
+  function frameHesitate(s) {
+    if (myGen !== kickGen) return;
+    if (!hPt) { hPt = s; flipState.prev = stick; flipState.pt = 0; }
+    settling = true;
+    const ht = s - hPt;
+    // micro-jitter melawan pasak selama tersangkut (amplitudo ~0.3% segmen)
+    rot = stick + arc * 0.003 * Math.sin(ht * 0.045) * Math.exp(-ht / 2500);
+    // jarum tertekuk maksimal menahan sisa momentum, bergetar halus
+    const bend = 24 + 3 * Math.sin(ht * 0.03);
+    kick.style.transform = `translateX(-50%) rotate(${bend.toFixed(1)}deg)`;
+    flipState.prev = rot; flipState.pt = s;
+    const idx = idxUnderPointer(rot);
+    drawWheel(idx);
+    if (ht < durHesitate) requestAnimationFrame(frameHesitate);
+    else { snapPt = 0; frameSnap(performance.now()); }
+  }
+  function frameSnap(s) {
+    if (myGen !== kickGen) return;
+    if (!snapPt) { snapPt = s; flipState.prev = stick; flipState.pt = 0; }
+    const st = (s - snapPt) / 1000;
+    // sentakan maju KONTINU dari titik tertahan: melintasi garis masuk
+    // ("klek!") dalam ~15 ms, lewat tengah ~120 ms, overshoot ~3 derajat,
+    // lalu pegas menarik mundur menetap tepat di tengah — tanpa teleport
+    const A = 7, B = 13;
+    rot = to - travel * Math.exp(-A * st) * Math.cos(B * st);
+    springFlipper(s);
+    const idx = idxUnderPointer(rot);
+    if (idx !== lastIdx) {
+      lastIdx = idx;
+      if (s - snapLastTick > 90) { snapLastTick = s; tickSound(); } // "klek!" crossing
     }
+    drawWheel(idx);
+    if (st * 1000 < durSnap) requestAnimationFrame(frameSnap);
+    else endSpin();
   }
 }
 
