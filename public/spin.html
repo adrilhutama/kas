@@ -18,7 +18,7 @@
   .chk { accent-color: #10b981; width: 1.1rem; height: 1.1rem; }
   #confettiCv { position: fixed; inset: 0; pointer-events: none; z-index: 60; }
   @keyframes popIn { from { transform: scale(.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-  #winModal.open .modal-box { animation: popIn .25s ease-out; }
+  #winModal.open .modal-box, #stealthModal.open .modal-box { animation: popIn .25s ease-out; }
 </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
@@ -30,7 +30,7 @@
   <header class="pt-6 pb-4 flex items-start justify-between gap-3">
     <div>
       <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-widest uppercase bg-slate-800/80 border border-slate-700/70 text-slate-400">Regu 3 &bull; Undian Backup</span>
-      <h1 class="mt-2 text-2xl font-extrabold tracking-tight">🎡 Roda Backup Libur</h1>
+      <h1 class="mt-2 text-2xl font-extrabold tracking-tight"><span id="stealthTrig" class="select-none">🎡</span> Roda Backup Libur</h1>
       <p class="text-slate-400 text-xs mt-1">Putar roda untuk menentukan personil backup secara transparan.</p>
     </div>
     <a href="/" class="shrink-0 mt-1 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-slate-700/70 bg-slate-900/60 text-slate-400 hover:text-emerald-300 hover:border-emerald-700/60">← Kas</a>
@@ -45,27 +45,6 @@
       <canvas id="wheel" width="640" height="640" class="w-full h-auto"></canvas>
     </div>
     <button id="btnSpin" class="w-full mt-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl py-3 text-base font-extrabold tracking-wide">PUTAR RODA</button>
-    <p id="spinHint" class="text-center text-[11px] text-slate-500 mt-1.5">Mode: <span id="modeLabel" class="text-slate-300">🎲 Murni Acak</span></p>
-  </section>
-
-  <!-- Admin mode -->
-  <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
-    <h2 class="font-semibold mb-2 text-sm border-l-2 border-amber-500 pl-2.5">🔐 Admin Mode</h2>
-    <div class="flex gap-1.5 mb-3">
-      <button id="modeFair" class="flex-1 px-2 py-2 rounded-xl text-xs font-bold border bg-emerald-600 border-emerald-500 text-white">🎲 Murni Acak</button>
-      <button id="modeTarget" class="flex-1 px-2 py-2 rounded-xl text-xs font-bold border bg-slate-800 border-slate-700 text-slate-400">🎯 Tentukan Target</button>
-    </div>
-    <div id="unlockBox" class="hidden grid gap-2">
-      <input id="adminPw" type="password" placeholder="Password admin untuk mode target" autocomplete="off"
-        class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-amber-500" />
-      <button id="btnUnlock" class="border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 rounded-xl py-2 text-xs font-bold">🔓 Buka Kunci Mode Target</button>
-      <p id="unlockErr" class="hidden text-rose-400 text-xs"></p>
-    </div>
-    <div id="targetBox" class="hidden grid gap-2">
-      <label class="text-xs text-slate-400">Personil yang HARUS terpilih:</label>
-      <select id="targetSel" class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-amber-500"></select>
-      <p class="text-[11px] text-slate-500">Roda tetap berputar natural beberapa putaran lalu mendarat di target. Penonton tidak akan tahu.</p>
-    </div>
   </section>
 
   <!-- Name checklist -->
@@ -101,6 +80,35 @@
   </div>
 </div>
 
+<!-- Stealth admin modal (only via secret trigger) -->
+<div id="stealthModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+  <div class="modal-box w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5">
+    <div class="text-xs uppercase tracking-widest text-slate-500 mb-3">⚙️ Pengaturan Putaran</div>
+    <div class="grid gap-2 mb-3">
+      <label class="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-700/70 bg-slate-800/60 text-sm cursor-pointer">
+        <input id="rigFair" type="radio" name="rigmode" value="fair" checked class="chk" />
+        <span>🎲 Acak Alami (Fair Random)</span>
+      </label>
+      <label class="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-slate-700/70 bg-slate-800/60 text-sm cursor-pointer">
+        <input id="rigTarget" type="radio" name="rigmode" value="target" class="chk" />
+        <span>🎯 Kunci Pemenang</span>
+      </label>
+    </div>
+    <div id="stealthUnlock" class="grid gap-2 mb-3">
+      <input id="adminPw" type="password" placeholder="Password admin" autocomplete="off"
+        class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
+      <p id="unlockErr" class="hidden text-rose-400 text-xs"></p>
+    </div>
+    <div id="stealthTarget" class="hidden grid gap-2 mb-3">
+      <select id="targetSel" class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3 py-2.5 text-sm outline-none focus:border-emerald-500"></select>
+    </div>
+    <div class="grid gap-2">
+      <button id="btnApplyRig" class="bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 text-sm font-bold">Terapkan &amp; Tutup</button>
+      <button id="btnCloseStealth" class="text-slate-500 hover:text-slate-300 text-xs py-1">Batal</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const HARI = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
 const BULAN_FULL = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
@@ -111,8 +119,7 @@ const TAU = Math.PI * 2;
 let names = [];        // {id, name, in} — in = ikut putaran
 let rot = 0;           // current wheel rotation (radians)
 let spinning = false;
-let mode = 'fair';     // 'fair' | 'target'
-let unlocked = sessionStorage.getItem('spin_unlocked') === '1';
+let rigTargetId = null; // stealth: locked winner id, null = fair random
 let lastWinner = null;
 
 const cv = document.getElementById('wheel');
@@ -282,11 +289,10 @@ function doSpin() {
     return;
   }
   let k;
-  if (mode === 'target') {
-    const tid = document.getElementById('targetSel').value;
-    k = list.findIndex(n => String(n.id) === String(tid));
+  if (rigTargetId !== null) {
+    k = list.findIndex(n => String(n.id) === String(rigTargetId));
     if (k < 0) {
-      showErr('Target tidak ikut putaran (mungkin ter-coret). Pilih target lain atau kembalikan ke Murni Acak.');
+      showErr('Target terkunci tidak ikut putaran. Buka kunci via trigger rahasia atau kembalikan ke acak.');
       return;
     }
   } else {
@@ -302,6 +308,8 @@ function finish(idx) {
   const w = list[idx];
   if (!w) return;
   lastWinner = w;
+  // stealth: a locked target wins exactly once, then silently back to fair
+  if (rigTargetId !== null && String(w.id) === String(rigTargetId)) rigTargetId = null;
   drawWheel(idx);
   fanfare();
   confetti();
@@ -383,43 +391,70 @@ async function loadNames() {
   renderNames(); drawWheel(); syncTargetSel();
 }
 
-// ---------- Admin mode ----------
-function setMode(m) {
-  mode = m;
-  const fair = m === 'fair';
-  document.getElementById('modeFair').className = 'flex-1 px-2 py-2 rounded-xl text-xs font-bold border ' +
-    (fair ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400');
-  document.getElementById('modeTarget').className = 'flex-1 px-2 py-2 rounded-xl text-xs font-bold border ' +
-    (!fair ? 'bg-amber-500 border-amber-400 text-slate-900' : 'bg-slate-800 border-slate-700 text-slate-400');
-  document.getElementById('modeLabel').textContent = fair ? '🎲 Murni Acak' : '🎯 Ditentukan Admin';
-  document.getElementById('unlockBox').classList.toggle('hidden', fair || unlocked);
-  document.getElementById('targetBox').classList.toggle('hidden', fair || !unlocked);
-  if (!fair && unlocked) syncTargetSel();
+// ---------- Stealth trigger: triple-click the 🎡 icon (works for touch too) ----------
+let trigTaps = [];
+document.getElementById('stealthTrig').addEventListener('click', () => {
+  const now = Date.now();
+  trigTaps = trigTaps.filter(t => now - t < 1200);
+  trigTaps.push(now);
+  if (trigTaps.length >= 3) {
+    trigTaps = [];
+    openStealth();
+  }
+});
+
+function openStealth() {
+  syncTargetSel();
+  const isTarget = rigTargetId !== null;
+  document.getElementById(isTarget ? 'rigTarget' : 'rigFair').checked = true;
+  if (isTarget) document.getElementById('targetSel').value = rigTargetId;
+  document.getElementById('stealthTarget').classList.toggle('hidden', !isTarget);
+  document.getElementById('adminPw').value = '';
+  document.getElementById('unlockErr').classList.add('hidden');
+  const m = document.getElementById('stealthModal');
+  m.classList.remove('hidden'); m.classList.add('open');
+}
+function closeStealth() {
+  const m = document.getElementById('stealthModal');
+  m.classList.add('hidden'); m.classList.remove('open');
 }
 
-async function unlock() {
-  const pw = document.getElementById('adminPw').value;
+document.querySelectorAll('input[name="rigmode"]').forEach(r => {
+  r.addEventListener('change', () => {
+    document.getElementById('stealthTarget').classList.toggle('hidden',
+      document.querySelector('input[name="rigmode"]:checked').value !== 'target');
+  });
+});
+
+async function applyRig() {
+  const want = document.querySelector('input[name="rigmode"]:checked').value;
   const ue = document.getElementById('unlockErr');
   ue.classList.add('hidden');
+  if (want === 'fair') {
+    rigTargetId = null;
+    closeStealth();
+    return;
+  }
+  const tid = document.getElementById('targetSel').value;
+  if (!tid) { ue.textContent = 'Pilih nama dulu.'; ue.classList.remove('hidden'); return; }
+  // verify admin password before arming a locked winner
   try {
     const r = await fetch('/api/auth/login', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pw }),
+      body: JSON.stringify({ password: document.getElementById('adminPw').value }),
     });
-    if (!r.ok) throw new Error((await r.json()).error || 'PIN salah');
-    unlocked = true;
-    sessionStorage.setItem('spin_unlocked', '1');
-    document.getElementById('adminPw').value = '';
-    setMode('target');
-  } catch (e) { ue.textContent = e.message; ue.classList.remove('hidden'); }
+    if (!r.ok) throw new Error((await r.json()).error || 'Password salah');
+  } catch (e) { ue.textContent = e.message; ue.classList.remove('hidden'); return; }
+  document.getElementById('adminPw').value = '';
+  rigTargetId = tid;
+  closeStealth();
 }
 
 // ---------- Events ----------
 document.getElementById('btnSpin').onclick = doSpin;
-document.getElementById('modeFair').onclick = () => setMode('fair');
-document.getElementById('modeTarget').onclick = () => setMode('target');
-document.getElementById('btnUnlock').onclick = unlock;
-document.getElementById('adminPw').addEventListener('keydown', e => { if (e.key === 'Enter') unlock(); });
+document.getElementById('btnApplyRig').onclick = applyRig;
+document.getElementById('btnCloseStealth').onclick = closeStealth;
+document.getElementById('adminPw').addEventListener('keydown', e => { if (e.key === 'Enter') applyRig(); });
 document.getElementById('btnResetNames').onclick = () => {
   names = names.filter(n => !String(n.id).startsWith('x-'));
   names.forEach(n => { n.in = true; });
@@ -456,7 +491,6 @@ document.getElementById('btnCloseWin').onclick = () => {
   document.getElementById('winModal').classList.remove('open');
 };
 
-setMode('fair');
 loadNames();
 
 // PWA: register service worker
