@@ -240,11 +240,11 @@ function drawWheel(highlight = -1) {
   ctx.fillText('★', cx, cy + 2);
 }
 
-// ---------- Spin: realistic ratchet physics, 2 random tease resolutions ----------
-// Tiap putaran acak 50:50 —
-//  'recoil': nyaris lolos ke depan, lalu membal balik ke pemenang (existing).
-//  'escape': tersangkut di perbatasan, lalu "klek!" tersentak lolos maju ke pemenang.
-// Kedua skenario berhenti TEPAT di tengah segmen k, jadi stealth target 100% akurat.
+// ---------- Spin: 10 skenario settle organik (dipilih acak per putaran) ----------
+// SNAP_ESCAPE, DEEP_RECOIL, DEAD_STOP, DOUBLE_WOBBLE, SLOW_CREEP,
+// SOFT_CUSHION, PIN_CHATTER, HEAVY_HESITATION, MICRO_RECOIL, SMOOTH_DRIFT.
+// Semua dirumuskan relatif thd tengah segmen pemenang & berakhir TEPAT di sana,
+// jadi stealth target 100% akurat apa pun skenarionya.
 let settling = false; // true during the final spring-settle phase
 let kickGen = 0;      // invalidates stale flipper snap-back timeouts
 
@@ -267,18 +267,12 @@ function spinToIndex(k) {
   const delta = norm(POINTER - (rot + (k + 0.5) * arc));
   const turns = 6 + Math.floor(Math.random() * 3); // 6–8 putaran penuh
   const from = rot, to = from + turns * TAU + delta;
-  // Tease resolution acak 50:50 per putaran — keduanya berhenti TEPAT di
-  // tengah segmen k, jadi stealth target 100% akurat apa pun skenarionya:
-  //  'recoil': dorong lewat tengah ke arah garis keluar, lalu pegas membal balik.
-  //  'escape': parkir tepat sebelum garis masuk, tertahan, lalu "klek!" lolos maju.
-  const scenario = Math.random() < 0.5 ? 'recoil' : 'escape';
-  const OMEGA = 13, ZETA = 0.22; // pegas ~2 Hz
+  // 10 skenario settle organik, dipilih acak per putaran. Semuanya dirumuskan
+  // RELATIF terhadap `to` (tengah segmen k) dan berakhir TEPAT di `to` —
+  // stealth target 100% akurat apa pun skenarionya.
+  const R = (a, b) => a + Math.random() * (b - a);
+  const SCEN = Math.floor(Math.random() * 10);
   const durSpin = 5500 + Math.random() * 1200;
-  const overshoot = arc * (0.28 + Math.random() * 0.12); // recoil: ~8-11 derajat utk 13 nama
-  const peak = to + overshoot;
-  const stickBack = arc * (0.52 + Math.random() * 0.06); // escape: parkir di tetangga, nempel garis masuk
-  const stick = to - stickBack;
-  const travel = to - stick; // jarak sentakan: titik tertahan → tengah segmen k
 
   const btn = document.getElementById('btnSpin');
   btn.disabled = true;
@@ -293,14 +287,6 @@ function spinToIndex(k) {
 
   // flipper digerakkan kecepatan roda selama fase pegas
   const flipState = { prev: 0, pt: 0 };
-  function springFlipper(s) {
-    const dt = Math.max(1, s - (flipState.pt || s));
-    flipState.pt = s;
-    const vel = (rot - flipState.prev) / (dt / 1000); // rad/s
-    flipState.prev = rot;
-    const deg = Math.max(-26, Math.min(26, -vel * 12));
-    kick.style.transform = `translateX(-50%) rotate(${deg.toFixed(1)}deg)`;
-  }
 
   // pemenang = posisi akhir roda berhenti (resolve by id agar tahan edit checklist)
   function endSpin() {
@@ -315,11 +301,91 @@ function spinToIndex(k) {
     finish(fi);
   }
 
-  // ---- phase 1: fast spin easing out to the tease point ----
-  // recoil → sedikit LEWAT tengah (nyaris lolos keluar), escape → parkir
-  // tepat SEBELUM garis masuk (nyaris berhenti di tetangga)
-  const phase1End = scenario === 'recoil' ? peak : stick;
-  const phase1Next = s => { (scenario === 'recoil' ? frameRecoil : frameHesitate)(s); };
+  // ---- mesin segmen: fase 1 menuju titik ancang, lalu segmen-segmen
+  // berurutan, diakhiri endSpin() tepat di `to` ----
+  // tiap segmen: { dur(ms), fn(s01,t)->sudut, needle, tickGap?, done? }
+  // needle: 'tickvel' = ikut kecepatan + tick saat lolos pin;
+  //   'vel' = ikut kecepatan tanpa suara; 'bend' = tertekuk menahan pasak;
+  //   'rattle' = ikut kecepatan + derak timer; 'still' = jarum tegak diam.
+  const segQueue = [];
+  let segPt = 0, segIdx = -1, segTickLast = 0;
+  function enqueue(segs) { segQueue.push(...segs); }
+  function nextSeg(s) {
+    segIdx++;
+    segPt = s;
+    flipState.prev = rot; flipState.pt = 0;
+    segTickLast = s;
+  }
+  function stepFrame(s) {
+    if (myGen !== kickGen) return;
+    const seg = segQueue[segIdx];
+    if (!seg) { endSpin(); return; }
+    settling = true;
+    const t = s - segPt, d = Math.max(1, seg.dur);
+    const s01 = Math.min(1, t / d);
+    rot = seg.fn(s01, t);
+    springNeedle(seg.needle, s, t);
+    const idx = idxUnderPointer(rot);
+    const crossed = idx !== lastIdx;
+    if (crossed) lastIdx = idx;
+    if (seg.needle === 'rattle') {
+      // derak cepat berdasar timer — chatter tidak menyeberang batas segmen
+      if (s - segTickLast > (seg.tickGap || 55)) { segTickLast = s; tickSound(); }
+    } else if (seg.needle === 'tickvel' && crossed) {
+      if (s - segTickLast > (seg.tickGap || 90)) { segTickLast = s; tickSound(); }
+    }
+    drawWheel(idx);
+    const isDone = seg.done ? seg.done(s01, t) : s01 >= 1;
+    if (isDone) { nextSeg(s); }
+    requestAnimationFrame(stepFrame);
+  }
+
+  // ---- jarum mengikuti karakteristik tiap segmen ----
+  function springNeedle(kind, s, t) {
+    if (kind === 'still') {
+      kick.style.transform = 'translateX(-50%)';
+      flipState.prev = rot; flipState.pt = s;
+      return;
+    }
+    if (kind === 'bend') {
+      // tertahan pasak: tertekuk maksimal + getar halus
+      const bend = 24 + 3 * Math.sin(t * 0.03);
+      kick.style.transform = `translateX(-50%) rotate(${bend.toFixed(1)}deg)`;
+      flipState.prev = rot; flipState.pt = s;
+      return;
+    }
+    // 'vel' (ikut kecepatan, tanpa suara), 'tickvel' (ikut kecepatan + tick
+    // saat lolos pin, suara diatur stepFrame), 'rattle' (seperti vel + derak)
+    const dt = Math.max(1, s - (flipState.pt || s));
+    flipState.pt = s;
+    const vel = (rot - flipState.prev) / (dt / 1000); // rad/s
+    flipState.prev = rot;
+    const gain = kind === 'rattle' ? 16 : 12;
+    const deg = Math.max(-26, Math.min(26, -vel * gain));
+    kick.style.transform = `translateX(-50%) rotate(${deg.toFixed(1)}deg)`;
+  }
+
+  // ---- fase 1: putaran cepat easeOutQuint menuju titik ancang skenario ----
+  // Tiap skenario parkir di titik ancangnya sendiri; segmen settle selalu
+  // KONTINU dari sana dan berakhir TEPAT di `to` (tengah segmen pemenang).
+  const holdBack = arc * R(0.52, 0.58); // SNAP/HEAVY: nempel garis masuk
+  // DEEP_RECOIL: LEWATI garis keluar 5-15% segmen (pointer sempat tunjuk
+  // tetangga), lalu pegas kuat menyentak balik — "mencoba keluar, terpental"
+  const overDeep = arc * R(0.55, 0.65);
+  const overMicro = arc * 0.11;         // MICRO_RECOIL: tipis ~3 derajat
+  const overSoft = arc * R(0.10, 0.14); // SOFT_CUSHION: sandaran bantalan
+  let phase1End = to;
+  if (SCEN === 0 || SCEN === 7) phase1End = to - holdBack;
+  else if (SCEN === 1) phase1End = to + overDeep;
+  else if (SCEN === 2) phase1End = to - arc * R(0.22, 0.28); // ancang mati
+  else if (SCEN === 4) phase1End = to - arc * R(0.55, 0.60); // creep dari tetangga
+  else if (SCEN === 5) phase1End = to + overSoft;
+  else if (SCEN === 6) phase1End = to - arc * 0.5; // tepat di garis pin masuk
+  else if (SCEN === 8) phase1End = to + overMicro;
+  else if (SCEN === 9) phase1End = to - arc * R(0.58, 0.65); // drift dari tetangga
+  // penanda kurva settle dihitung dari fase 1 ke mana ia mendarat
+  const anchor = phase1End;
+
   (function frameSpin(t) {
     if (myGen !== kickGen) return; // superseded
     const p = Math.min(1, (t - t0) / durSpin);
@@ -336,68 +402,141 @@ function spinToIndex(k) {
     }
     drawWheel(idx);
     if (p < 1) requestAnimationFrame(frameSpin);
-    else phase1Next(performance.now());
+    else { buildScenario(); nextSeg(performance.now()); requestAnimationFrame(stepFrame); }
   })(t0);
 
-  // ---- phase 2a (recoil): damped spring, settles exactly on `to` ----
-  const durSettle = 1200; // ms of spring recoil
-  let sPt = 0, sLastTick = 0;
-  function frameRecoil(s) {
-    if (myGen !== kickGen) return;
-    if (!sPt) { sPt = s; flipState.prev = peak; flipState.pt = 0; }
-    settling = true;
-    const st = (s - sPt) / 1000;
-    const damp = Math.exp(-ZETA * OMEGA * st);
-    rot = to + overshoot * damp * Math.cos(OMEGA * st);
-    springFlipper(s);
-    const idx = idxUnderPointer(rot);
-    if (idx !== lastIdx) {
-      lastIdx = idx;
-      if (s - sLastTick > 90) { sLastTick = s; tickSound(); } // rattle on boundary graze
+  // ---- 10 skenario settle: semua berakhir TEPAT di `to` ----
+  function buildScenario() {
+    const D = t => t >= 1; // selesai saat s01 mencapai 1
+    switch (SCEN) {
+      // 0 — SNAP_ESCAPE: merayap di garis masuk, jeda resistensi, "klek!" lolos maju
+      case 0: {
+        const travel = to - anchor;
+        const hesitate = R(700, 1200);
+        enqueue([
+          { dur: hesitate, needle: 'bend', fn: (s01, t) =>
+            anchor + arc * 0.003 * Math.sin(t * 0.045) * Math.exp(-t / 2500) },
+          { dur: 900, needle: 'tickvel', tickGap: 90, fn: s01 => {
+            const st = s01 * 0.9;
+            return to - travel * Math.exp(-7 * st) * Math.cos(13 * st);
+          }, done: D },
+        ]);
+        break;
+      }
+      // 1 — DEEP_RECOIL: lewat pin dalam, terpental dramatis ke belakang.
+      // Fase 1 sudah melewati garis keluar (pointer menunjuk tetangga),
+      // lalu pegas underdamped menyentak balik jauh ke tengah + 1 ayunan.
+      case 1: {
+        const O = anchor - to, W = 11, Z = 0.14, T = 1600;
+        enqueue([
+          { dur: T, needle: 'tickvel', tickGap: 90, fn: s01 => {
+            const st = s01 * (T / 1000);
+            return to + O * Math.exp(-Z * W * st) * Math.cos(W * st);
+          }, done: D },
+        ]);
+        break;
+      }
+      // 2 — DEAD_STOP: berhenti mati presisi, tanpa pegas
+      case 2: {
+        enqueue([
+          { dur: 700, needle: 'still', fn: s01 => {
+            const e = 1 - Math.pow(1 - s01, 4); // easeOutQuart pendek
+            return anchor + (to - anchor) * e;
+          }, done: D },
+          { dur: 260, needle: 'still', fn: () => to },
+        ]);
+        break;
+      }
+      // 3 — DOUBLE_WOBBLE: ragu di atas pin, osilasi 2x kecil lalu rebah ke tujuan.
+      // sin() dimulai dari 0 → kontinu dari posisi fase-1; 2 periode penuh,
+      // amplitudo meluruh, tidak pernah menyeberang garis (tanpa tick, hanya
+      // goyangan jarum) — pemenang tetap yang di tengah.
+      case 3: {
+        const side = Math.random() < 0.5 ? 1 : -1;
+        const A = arc * R(0.10, 0.14);
+        enqueue([
+          { dur: 1500, needle: 'vel', fn: s01 => {
+            const st = s01 * 1.5;
+            return to + side * A * Math.sin(2 * Math.PI * 2 * s01) * Math.exp(-2.6 * st);
+          }, done: D },
+        ]);
+        break;
+      }
+      // 4 — SLOW_CREEP: gesekan tinggi, merayap tanpa lonjakan pegas.
+      // Fase 1 parkir di segmen tetangga; roda merayap smoothstep ~2 detik
+      // menembus garis masuk sampai ke tengah, tick pelan tiap batas.
+      case 4: {
+        enqueue([
+          { dur: 2100, needle: 'tickvel', tickGap: 200, fn: s01 =>
+            anchor + (to - anchor) * (s01 * s01 * (3 - 2 * s01)), done: D },
+        ]);
+        break;
+      }
+      // 5 — SOFT_CUSHION: membal lembut overdamped seperti bantalan karet.
+      // Fase 1 bersandar sedikit lewat tengah; kurva overdamped (dua
+      // eksponensial) kembali monoton ke tengah tanpa osilasi.
+      case 5: {
+        const O = anchor - to, W = 9, Z = 1.15;
+        const q = Math.sqrt(Z * Z - 1);
+        const c1 = (1 + Z / q) / 2, c2 = (1 - Z / q) / 2; // x(0)=O, v(0)=0
+        enqueue([
+          { dur: 1300, needle: 'vel', fn: s01 => {
+            const st = s01 * 1.3;
+            const e1 = Math.exp(-W * st * (Z - q));
+            const e2 = Math.exp(-W * st * (Z + q));
+            return to + O * (c1 * e1 + c2 * e2);
+          }, done: D },
+        ]);
+        break;
+      }
+      // 6 — PIN_CHATTER: jarum derak cepat di atas pin sebelum terkunci diam
+      case 6: {
+        enqueue([
+          { dur: 1000, needle: 'rattle', tickGap: 55, fn: (s01, t) =>
+            to + arc * 0.012 * Math.sin(t * 0.09) * (1 - s01) + (anchor - to) * (1 - s01) * (1 - s01)
+          , done: D },
+          { dur: 300, needle: 'still', fn: () => to },
+        ]);
+        break;
+      }
+      // 7 — HEAVY_HESITATION: mati total di garis ~300-400ms (hening),
+      // lalu sisa momentum menjatuhkannya selangkah ke depan + 1 getaran.
+      case 7: {
+        const travel = to - anchor;
+        enqueue([
+          { dur: R(300, 400), needle: 'still', fn: () => anchor },
+          { dur: 1100, needle: 'tickvel', tickGap: 90, fn: s01 => {
+            const st = s01 * 1.1;
+            return to - travel * Math.exp(-6 * st) * Math.cos(11 * st);
+          }, done: D },
+        ]);
+        break;
+      }
+      // 8 — MICRO_RECOIL: membal tipis 2-3 derajat, satu sentakan kaku
+      case 8: {
+        const O = anchor - to;
+        enqueue([
+          { dur: 550, needle: 'vel', fn: s01 => {
+            const st = s01 * 0.55;
+            return to + O * Math.exp(-0.55 * 16 * st) * Math.cos(16 * st);
+          }, done: D },
+          { dur: 200, needle: 'still', fn: () => to },
+        ]);
+        break;
+      }
+      // 9 — SMOOTH_DRIFT: lewat pin tanpa hambatan, meluncur santai ke tengah.
+      // Fase 1 parkir di segmen tetangga; easeOutCubic menembus garis masuk
+      // ("klek" tunggal) lalu meluncur lembut sampai ke tengah.
+      default: {
+        enqueue([
+          { dur: 1600, needle: 'tickvel', tickGap: 90, fn: s01 => {
+            const e = 1 - Math.pow(1 - s01, 3); // easeOutCubic
+            return anchor + (to - anchor) * e;
+          }, done: D },
+        ]);
+        break;
+      }
     }
-    drawWheel(idx);
-    if (st * 1000 < durSettle) requestAnimationFrame(frameRecoil);
-    else endSpin();
-  }
-
-  // ---- phase 2b (escape): hesitate at the boundary, "klek!" snaps forward ----
-  const durHesitate = 700 + Math.random() * 500; // tersangkut, nyaris berhenti
-  const durSnap = 900; // sentakan + satu getaran, menetap di tengah k
-  let hPt = 0, snapPt = 0, snapLastTick = 0;
-  function frameHesitate(s) {
-    if (myGen !== kickGen) return;
-    if (!hPt) { hPt = s; flipState.prev = stick; flipState.pt = 0; }
-    settling = true;
-    const ht = s - hPt;
-    // micro-jitter melawan pasak selama tersangkut (amplitudo ~0.3% segmen)
-    rot = stick + arc * 0.003 * Math.sin(ht * 0.045) * Math.exp(-ht / 2500);
-    // jarum tertekuk maksimal menahan sisa momentum, bergetar halus
-    const bend = 24 + 3 * Math.sin(ht * 0.03);
-    kick.style.transform = `translateX(-50%) rotate(${bend.toFixed(1)}deg)`;
-    flipState.prev = rot; flipState.pt = s;
-    const idx = idxUnderPointer(rot);
-    drawWheel(idx);
-    if (ht < durHesitate) requestAnimationFrame(frameHesitate);
-    else { snapPt = 0; frameSnap(performance.now()); }
-  }
-  function frameSnap(s) {
-    if (myGen !== kickGen) return;
-    if (!snapPt) { snapPt = s; flipState.prev = stick; flipState.pt = 0; }
-    const st = (s - snapPt) / 1000;
-    // sentakan maju KONTINU dari titik tertahan: melintasi garis masuk
-    // ("klek!") dalam ~15 ms, lewat tengah ~120 ms, overshoot ~3 derajat,
-    // lalu pegas menarik mundur menetap tepat di tengah — tanpa teleport
-    const A = 7, B = 13;
-    rot = to - travel * Math.exp(-A * st) * Math.cos(B * st);
-    springFlipper(s);
-    const idx = idxUnderPointer(rot);
-    if (idx !== lastIdx) {
-      lastIdx = idx;
-      if (s - snapLastTick > 90) { snapLastTick = s; tickSound(); } // "klek!" crossing
-    }
-    drawWheel(idx);
-    if (st * 1000 < durSnap) requestAnimationFrame(frameSnap);
-    else endSpin();
   }
 }
 
