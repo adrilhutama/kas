@@ -16,6 +16,8 @@
   table.matrix tbody tr:nth-child(even) td:first-child { background-color: rgb(30 41 59); }
   table.matrix tbody tr:nth-child(odd) td:first-child { background-color: rgb(15 23 42); }
   table.matrix tbody td:first-child { box-shadow: 4px 0 6px -4px rgb(0 0 0 / .6); }
+  /* hairline dividers between rows */
+  table.matrix tbody tr + tr { border-top: 1px solid rgb(30 41 59 / .5); }
   /* row hover for readability across wide rows */
   table.matrix tbody tr:hover td { background-color: rgb(51 65 85 / .45); }
   table.matrix tbody tr:hover td:first-child { background-color: rgb(51 65 85); }
@@ -24,57 +26,61 @@
   #payChev { transition: transform .2s; display: inline-block; }
   details[open] #payChev { transform: rotate(180deg); }
   /* savings goal progress bar */
-  #goalBar { transition: width .8s ease; }
+  #goalBar {
+    transition: width .8s ease;
+    box-shadow: 0 0 12px rgb(52 211 153 / .45), 0 0 4px rgb(251 191 36 / .35);
+  }
 </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen">
-<div class="max-w-3xl mx-auto px-3 pb-16">
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+<!-- subtle top glow -->
+<div class="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-emerald-950/50 via-slate-950/20 to-transparent"></div>
+<div class="relative max-w-3xl mx-auto px-4 pb-16">
 
   <!-- Header -->
-  <header class="py-5 text-center">
-    <div class="text-3xl mb-1">💰</div>
-    <h1 class="text-xl font-bold tracking-wide">KAS REGU 3</h1>
-    <p class="text-slate-400 text-sm">Iuran Rp 10.000 / orang / bulan &bull; sejak Juli 2026</p>
-    <a href="/admin.html" class="inline-block mt-2 text-xs text-slate-500 hover:text-emerald-400">🔐 Admin</a>
+  <header class="pt-6 pb-5 flex items-start justify-between gap-3">
+    <div>
+      <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-widest uppercase bg-slate-800/80 border border-slate-700/70 text-slate-400">Regu 3 &bull; Internal Operations</span>
+      <h1 class="mt-2 text-2xl font-extrabold tracking-tight">Kas Regu 3</h1>
+      <p class="text-slate-400 text-xs mt-1 tabular-nums">Iuran Rp 10.000 / orang / bulan &bull; sejak Jul 2026</p>
+    </div>
+    <a href="/admin.html" title="Admin" class="shrink-0 mt-1 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-slate-700/70 bg-slate-900/60 text-slate-400 hover:text-emerald-300 hover:border-emerald-700/60">🔒 Admin</a>
   </header>
 
   <!-- Error / loading -->
-  <div id="err" class="hidden mb-3 p-3 rounded-lg bg-rose-900/40 border border-rose-700 text-rose-200 text-sm"></div>
-  <div id="loading" class="text-center text-slate-400 py-10">Memuat data kas…</div>
+  <div id="err" class="hidden mb-3 p-3 rounded-2xl bg-rose-950/60 border border-rose-800/60 text-rose-200 text-sm"></div>
+  <div id="loading" class="text-center text-slate-500 py-10 text-sm">Memuat data kas…</div>
 
   <div id="app" class="hidden">
     <!-- Stat cards -->
-    <section class="grid grid-cols-3 gap-2 mb-4">
-      <div class="bg-slate-800 rounded-xl p-3 border border-slate-700">
-        <div class="text-[11px] text-slate-400 uppercase">Masuk</div>
-        <div id="stIncome" class="font-bold text-emerald-400 text-sm sm:text-lg">-</div>
+    <section class="grid grid-cols-3 gap-2 mb-3">
+      <div class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-3">
+        <div class="flex items-center gap-1.5 text-[11px] text-slate-400 uppercase tracking-wide"><span class="text-emerald-400">↗</span> Masuk</div>
+        <div id="stIncome" class="mt-1 font-semibold tabular-nums text-emerald-300 text-sm sm:text-lg">-</div>
       </div>
-      <div class="bg-slate-800 rounded-xl p-3 border border-slate-700">
-        <div class="text-[11px] text-slate-400 uppercase">Keluar</div>
-        <div id="stExpense" class="font-bold text-rose-400 text-sm sm:text-lg">-</div>
+      <div class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-3">
+        <div class="flex items-center gap-1.5 text-[11px] text-slate-400 uppercase tracking-wide"><span class="text-rose-400">↘</span> Keluar</div>
+        <div id="stExpense" class="mt-1 font-semibold tabular-nums text-rose-300 text-sm sm:text-lg">-</div>
       </div>
-      <div class="bg-slate-800 rounded-xl p-3 border border-slate-700">
-        <div class="text-[11px] text-slate-400 uppercase">Saldo</div>
-        <div id="stBalance" class="font-bold text-amber-300 text-sm sm:text-lg">-</div>
+      <div class="rounded-2xl border border-amber-500/25 bg-slate-900/60 backdrop-blur-sm p-3">
+        <div class="flex items-center gap-1.5 text-[11px] text-slate-400 uppercase tracking-wide"><span class="text-amber-300">◉</span> Saldo</div>
+        <div id="stBalance" class="mt-1 font-extrabold tabular-nums text-amber-300 text-base sm:text-xl">-</div>
       </div>
     </section>
 
-    <!-- Quick share to WhatsApp -->
-    <button id="btnWA" class="w-full mb-3 bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 rounded-xl py-2.5 text-sm font-semibold">📋 Salin Format WA</button>
-
-    <!-- Payment info accordion -->
-    <details id="payInfo" class="mb-4 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+    <!-- Payment info accordion (blends with stat cards above) -->
+    <details id="payInfo" class="mb-4 rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm overflow-hidden">
       <summary class="px-4 py-3 cursor-pointer list-none flex justify-between items-center text-sm font-semibold">
         <span>💳 Cara Bayar / Info Rekening Kas</span>
-        <span id="payChev" class="text-slate-400 text-xs">▼</span>
+        <span id="payChev" class="text-slate-500 text-xs">▼</span>
       </summary>
-      <div class="px-4 pb-4 text-sm space-y-2">
-        <div class="bg-slate-900 border border-slate-700 rounded-lg p-3 space-y-1.5">
-          <div class="flex justify-between gap-2"><span class="text-slate-400">Bank / E-Wallet</span><span id="payBank" class="font-semibold text-right">-</span></div>
-          <div class="flex justify-between gap-2"><span class="text-slate-400">Nomor</span><span id="payNum" class="font-mono font-bold text-emerald-300 text-right">-</span></div>
-          <div class="flex justify-between gap-2"><span class="text-slate-400">Atas Nama</span><span id="payName" class="font-semibold text-right">-</span></div>
+      <div class="px-4 pb-4 text-sm space-y-2 border-t border-slate-800/60 pt-3">
+        <div class="bg-slate-950/60 border border-slate-800/70 rounded-xl p-3 space-y-1.5">
+          <div class="flex justify-between gap-2"><span class="text-slate-500">Bank / E-Wallet</span><span id="payBank" class="font-semibold text-right">-</span></div>
+          <div class="flex justify-between gap-2"><span class="text-slate-500">Nomor</span><span id="payNum" class="font-mono font-bold text-emerald-300 text-right">-</span></div>
+          <div class="flex justify-between gap-2"><span class="text-slate-500">Atas Nama</span><span id="payName" class="font-semibold text-right">-</span></div>
         </div>
-        <button id="btnCopyRek" class="w-full bg-slate-700 hover:bg-slate-600 rounded-lg py-1.5 text-xs font-semibold">📋 Salin Nomor</button>
+        <button id="btnCopyRek" class="w-full border border-slate-700/70 bg-slate-800/60 hover:bg-slate-700/60 rounded-xl py-2 text-xs font-semibold">📋 Salin Nomor</button>
         <div id="payQris"></div>
         <p id="payNote" class="text-[11px] text-slate-500"></p>
       </div>
@@ -82,7 +88,7 @@
 
     <!-- Month filter -->
     <section class="mb-4">
-      <div class="text-xs text-slate-400 mb-1.5">Periode ditampilkan:</div>
+      <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-1.5">Periode ditampilkan</div>
       <div id="chips" class="flex flex-wrap gap-1.5"></div>
     </section>
 
@@ -90,29 +96,31 @@
     <section id="perMonth" class="flex flex-wrap gap-1.5 mb-4 text-xs"></section>
 
     <!-- Savings goal -->
-    <section id="goalCard" class="hidden mb-6 bg-slate-800 border border-slate-700 rounded-xl p-4">
-      <h2 class="font-semibold mb-1 text-sm">🎯 <span id="goalTitle">Target Dana Bersama Regu</span></h2>
-      <div class="h-3.5 rounded-full bg-slate-900 border border-slate-700 overflow-hidden mb-2">
-        <div id="goalBar" class="h-full w-0 rounded-full bg-gradient-to-r from-emerald-500 to-amber-400"></div>
+    <section id="goalCard" class="hidden mb-6 rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4">
+      <h2 class="font-semibold mb-2 text-sm">🎯 <span id="goalTitle">Target Dana Bersama Regu</span></h2>
+      <div class="h-2.5 rounded-full bg-slate-950/80 border border-slate-800/70 overflow-hidden mb-2.5">
+        <div id="goalBar" class="h-full w-0 rounded-full bg-gradient-to-r from-emerald-400 via-emerald-500 to-amber-400"></div>
       </div>
-      <div class="text-sm mb-1">Terkumpul: <span id="goalCollected" class="font-bold text-emerald-300">-</span>
+      <div class="text-sm mb-1 tabular-nums">Terkumpul: <span id="goalCollected" class="font-bold text-emerald-300">-</span>
         <span class="text-slate-400">dari target <span id="goalTarget">-</span></span>
-        <span id="goalPct" class="ml-1 px-1.5 py-px rounded text-xs font-bold bg-amber-500/20 border border-amber-500/50 text-amber-300">0%</span>
+        <span id="goalPct" class="ml-1 px-1.5 py-px rounded-full text-[11px] font-bold bg-amber-500/15 border border-amber-500/40 text-amber-300">0%</span>
       </div>
-      <div id="goalSplit" class="text-[11px] text-slate-500 mb-2"></div>
+      <div id="goalSplit" class="text-[11px] text-slate-500 mb-2 tabular-nums"></div>
       <div id="goalRemain" class="text-xs mb-3"></div>
       <a id="goalDonate" href="#" target="_blank" rel="noopener"
-        class="hidden w-full text-center bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl py-2.5 text-sm font-bold">🎁 Mau Kasih Lebih? Donasi via Sibagi.com</a>
+        class="hidden mx-auto w-fit px-5 py-2 text-center border border-amber-500/50 bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 rounded-xl text-xs font-bold">🎁 Mau Kasih Lebih? Donasi via Sibagi.com</a>
     </section>
 
     <!-- Matrix -->
     <section class="mb-6">
-      <h2 class="font-semibold mb-2 text-sm">📋 Status Iuran Anggota</h2>
-      <div class="flex flex-wrap gap-1.5 mb-2">
-        <button id="pillAll" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">Semua Anggota (<span id="pillAllN">0</span>)</button>
-        <button id="pillUnpaid" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">🔴 Belum Lunas Bulan Ini (<span id="pillUnpaidN">0</span>)</button>
+      <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+        <h2 class="font-semibold text-sm">📋 Status Iuran Anggota</h2>
+        <div class="flex flex-wrap gap-1.5">
+          <button id="pillAll" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">Semua Anggota (<span id="pillAllN">0</span>)</button>
+          <button id="pillUnpaid" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">🔴 Belum Lunas Bulan Ini (<span id="pillUnpaidN">0</span>)</button>
+        </div>
       </div>
-      <div class="scroll-x rounded-xl border border-slate-700">
+      <div class="scroll-x rounded-2xl border border-slate-800/80">
         <table class="matrix w-full text-sm whitespace-nowrap">
           <thead>
             <tr id="mHead" class="bg-slate-800 text-slate-300 text-xs"></tr>
@@ -120,7 +128,7 @@
           <tbody id="mBody"></tbody>
         </table>
       </div>
-      <p class="text-[11px] text-slate-500 mt-1">Geser tabel ke samping untuk melihat semua bulan → &bull; kolom Total mengikuti periode yang ditampilkan.</p>
+      <p class="text-[11px] text-slate-600 mt-1.5">Geser tabel ke samping untuk melihat semua bulan → &bull; kolom Total mengikuti periode yang ditampilkan.</p>
     </section>
 
     <!-- Expenses -->
@@ -168,9 +176,6 @@ let SHOW_UNPAID_ONLY = false;
 function unpaidList(d) {
   return (d.members || []).filter(m => !m.paid[THIS_MONTH]);
 }
-function paidCount(d) {
-  return (d.members || []).filter(m => m.paid[THIS_MONTH]).length;
-}
 
 async function copyText(text, btn, doneLabel) {
   let ok = false;
@@ -194,32 +199,6 @@ async function copyText(text, btn, doneLabel) {
     }
   }
   return ok;
-}
-
-function buildWAText() {
-  const d = CURRENT;
-  if (!d) return '';
-  const bulan = namaBulan(THIS_MONTH);
-  const unpaid = unpaidList(d);
-  const paidN = paidCount(d);
-  const totalN = (d.members || []).length;
-  const lines = [
-    `📢 UPDATE KAS REGU 3 (${bulan})`,
-    `💰 Saldo Kas: ${rp(d.current_balance)}`,
-    `(Masuk: ${rp(d.total_income)} | Keluar: ${rp(d.total_expense)})`,
-    '',
-    `🔴 Belum Lunas (${bulan}):`
-  ];
-  if (unpaid.length) unpaid.forEach(m => lines.push(`- ${m.name}`));
-  else lines.push('- Nihil, semua sudah lunas 🎉');
-  lines.push(
-    '',
-    `🟢 Lunas: ${paidN}/${totalN} orang`,
-    '',
-    'Cek rincian & mutasi lengkap:',
-    `👉 ${location.origin}`
-  );
-  return lines.join('\n');
 }
 
 async function load() {
@@ -248,7 +227,7 @@ function render(d) {
   document.getElementById('stExpense').textContent = rp(d.total_expense);
   const bal = document.getElementById('stBalance');
   bal.textContent = rp(d.current_balance);
-  bal.className = 'font-bold text-sm sm:text-lg ' + (d.current_balance < 0 ? 'text-rose-400' : 'text-amber-300');
+  bal.className = 'mt-1 font-extrabold tabular-nums text-base sm:text-xl ' + (d.current_balance < 0 ? 'text-rose-300' : 'text-amber-300');
   document.getElementById('upd').textContent = 'Diperbarui ' + new Date().toLocaleString('id-ID');
 
   // chips
@@ -364,8 +343,8 @@ function render(d) {
   }
   d.expenses.forEach(e => {
     const div = document.createElement('div');
-    div.className = 'bg-slate-800 border border-slate-700 rounded-xl px-3 py-2.5 flex justify-between gap-2';
-    div.innerHTML = `<div><div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500">${tglID(e.expense_date)}</div></div><div class="font-bold text-rose-400 text-sm whitespace-nowrap">${rp(e.amount)}</div>`;
+    div.className = 'rounded-2xl border border-slate-800/80 bg-slate-900/60 px-3.5 py-2.5 flex justify-between gap-2';
+    div.innerHTML = `<div><div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500">${tglID(e.expense_date)}</div></div><div class="font-bold tabular-nums text-rose-300 text-sm whitespace-nowrap">${rp(e.amount)}</div>`;
     ex.appendChild(div);
   });
 }
@@ -380,17 +359,11 @@ document.getElementById('payName').textContent = PAY_INFO.name;
 document.getElementById('payNote').textContent = PAY_INFO.note || '';
 if (PAY_INFO.qrisImg) {
   document.getElementById('payQris').innerHTML =
-    `<img src="${PAY_INFO.qrisImg}" alt="QRIS Kas Regu 3" class="w-40 h-40 object-contain mx-auto rounded-lg bg-white p-1" />`;
+    `<img src="${PAY_INFO.qrisImg}" alt="QRIS Kas Regu 3" class="w-40 h-40 object-contain mx-auto rounded-xl bg-white p-1" />`;
 }
 
 document.getElementById('btnCopyRek').onclick = e => {
   copyText(PAY_INFO.number, e.currentTarget, '✓ Nomor tersalin!');
-};
-
-document.getElementById('btnWA').onclick = e => {
-  const t = buildWAText();
-  if (!t) return;
-  copyText(t, e.currentTarget, '✓ Tersalin ke Clipboard!');
 };
 
 document.getElementById('pillAll').onclick = () => {

@@ -15,6 +15,8 @@
   table.matrix tbody tr:nth-child(even) td:first-child { background-color: rgb(30 41 59); }
   table.matrix tbody tr:nth-child(odd) td:first-child { background-color: rgb(15 23 42); }
   table.matrix tbody td:first-child { box-shadow: 4px 0 6px -4px rgb(0 0 0 / .6); }
+  /* hairline dividers between rows */
+  table.matrix tbody tr + tr { border-top: 1px solid rgb(30 41 59 / .5); }
   /* row hover for readability across wide rows */
   table.matrix tbody tr:hover td { background-color: rgb(51 65 85 / .45); }
   table.matrix tbody tr:hover td:first-child { background-color: rgb(51 65 85); }
@@ -22,54 +24,57 @@
   .tgl:active { transform: scale(.9); }
 </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen">
-<div class="max-w-3xl mx-auto px-3 pb-16">
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+<!-- subtle top glow -->
+<div class="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-emerald-950/50 via-slate-950/20 to-transparent"></div>
+<div class="relative max-w-3xl mx-auto px-4 pb-16">
 
-  <header class="py-5 text-center">
-    <h1 class="text-xl font-bold">🔐 ADMIN — KAS REGU 3</h1>
-    <a href="/" class="text-xs text-slate-500 hover:text-emerald-400">← Kembali ke tampilan publik</a>
+  <header class="pt-6 pb-5 flex items-start justify-between gap-3">
+    <div>
+      <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-widest uppercase bg-slate-800/80 border border-slate-700/70 text-slate-400">Regu 3 &bull; Admin Panel</span>
+      <h1 class="mt-2 text-2xl font-extrabold tracking-tight">🔐 Kelola Kas</h1>
+    </div>
+    <a href="/" class="shrink-0 mt-1 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-slate-700/70 bg-slate-900/60 text-slate-400 hover:text-emerald-300 hover:border-emerald-700/60">← Publik</a>
   </header>
 
   <!-- Login barrier -->
-  <div id="login" class="max-w-sm mx-auto bg-slate-800 border border-slate-700 rounded-xl p-5">
+  <div id="login" class="max-w-sm mx-auto rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-5">
     <h2 class="font-semibold mb-3">Masuk sebagai admin</h2>
     <input id="pw" type="password" placeholder="Password admin" autocomplete="current-password"
-      class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 mb-3 outline-none focus:border-emerald-500" />
-    <button id="btnLogin" class="w-full bg-emerald-600 hover:bg-emerald-500 rounded-lg py-2 font-semibold">Masuk</button>
+      class="w-full bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 mb-3 text-sm outline-none focus:border-emerald-500" />
+    <button id="btnLogin" class="w-full bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 font-semibold">Masuk</button>
     <p id="loginErr" class="hidden text-rose-400 text-sm mt-2"></p>
   </div>
 
   <!-- Dashboard -->
   <div id="dash" class="hidden">
-    <div class="flex items-center justify-between mb-3">
-      <div class="text-sm text-slate-400">Saldo: <span id="stBalance" class="font-bold text-amber-300">-</span>
-        <span class="text-xs">(<span id="stIncome" class="text-emerald-400"></span> / <span id="stExpense" class="text-rose-400"></span>)</span>
+    <!-- Admin control bar: balance + quick actions -->
+    <div class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-2">
+      <div class="text-sm text-slate-400">Saldo: <span id="stBalance" class="font-extrabold tabular-nums text-amber-300">-</span>
+        <span class="text-xs">(<span id="stIncome" class="text-emerald-400 tabular-nums"></span> / <span id="stExpense" class="text-rose-400 tabular-nums"></span>)</span>
       </div>
-      <button id="btnLogout" class="text-xs px-2.5 py-1 rounded-lg bg-slate-800 border border-slate-700 text-slate-400">Keluar</button>
+      <div class="flex gap-1.5">
+        <button id="btnWA" class="text-xs px-3 py-1.5 rounded-full border border-emerald-700/60 bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/60">📋 Salin Rekap WA</button>
+        <button id="btnLogout" class="text-xs px-3 py-1.5 rounded-full border border-slate-700/70 bg-slate-800/60 text-slate-400 hover:text-slate-200">Keluar</button>
+      </div>
     </div>
-    <div id="err" class="hidden mb-3 p-3 rounded-lg bg-rose-900/40 border border-rose-700 text-rose-200 text-sm"></div>
+    <div id="err" class="hidden mb-3 p-3 rounded-2xl bg-rose-950/60 border border-rose-800/60 text-rose-200 text-sm"></div>
 
-    <!-- Quick share to WhatsApp -->
-    <button id="btnWA" class="w-full mb-3 bg-emerald-700 hover:bg-emerald-600 border border-emerald-600 rounded-xl py-2.5 text-sm font-semibold">📋 Salin Format WA</button>
-
-    <!-- Month filter + add month -->
-    <section class="mb-4">
+    <!-- 1. Kelola Iuran Anggota -->
+    <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
+      <h2 class="font-semibold mb-3 text-sm border-l-2 border-emerald-500 pl-2.5">📋 Kelola Iuran Anggota <span class="text-slate-500 font-normal">(ketuk badge untuk ubah)</span></h2>
+      <!-- Month filter + add month -->
       <div class="flex flex-wrap gap-1.5 items-center" id="chips"></div>
-      <div class="flex gap-1.5 mt-2">
+      <div class="flex gap-1.5 mt-2 mb-3">
         <input id="newMonth" type="month" min="2026-07"
-          class="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-sm" />
-        <button id="btnAddMonth" class="text-xs px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600">+ Tampilkan bulan</button>
+          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3 py-2 text-sm" />
+        <button id="btnAddMonth" class="text-xs px-3 py-2 rounded-xl border border-slate-700/70 bg-slate-800/60 hover:bg-slate-700/60">+ Tampilkan bulan</button>
       </div>
-    </section>
-
-    <!-- Payment matrix (tap to toggle) -->
-    <section class="mb-6">
-      <h2 class="font-semibold mb-1 text-sm">📋 Kelola Iuran <span class="text-slate-500 font-normal">(ketuk badge untuk ubah)</span></h2>
       <div class="flex flex-wrap gap-1.5 mb-2">
         <button id="pillAll" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">Semua Anggota (<span id="pillAllN">0</span>)</button>
         <button id="pillUnpaid" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">🔴 Belum Lunas Bulan Ini (<span id="pillUnpaidN">0</span>)</button>
       </div>
-      <div class="scroll-x rounded-xl border border-slate-700">
+      <div class="scroll-x rounded-xl border border-slate-800/70">
         <table class="matrix w-full text-sm whitespace-nowrap">
           <thead><tr id="mHead" class="bg-slate-800 text-slate-300 text-xs"></tr></thead>
           <tbody id="mBody"></tbody>
@@ -77,47 +82,47 @@
       </div>
     </section>
 
-    <!-- Savings goal settings -->
-    <section class="mb-6">
-      <h2 class="font-semibold mb-2 text-sm">🎯 Pengaturan Target &amp; Sibagi</h2>
-      <form id="fGoal" class="bg-slate-800 border border-slate-700 rounded-xl p-3 grid gap-2">
+    <!-- 2. Target Dana & Donasi Sibagi -->
+    <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
+      <h2 class="font-semibold mb-3 text-sm border-l-2 border-amber-500 pl-2.5">🎯 Target Dana &amp; Donasi Sibagi</h2>
+      <form id="fGoal" class="grid gap-2">
         <input id="goalTitleIn" placeholder="Nama/Judul Target (cth: Acara Makan Regu)" required
-          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
         <input id="goalTargetIn" type="number" min="1" step="1000" placeholder="Target Nominal (Rp)" required
-          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
         <input id="goalUrlIn" type="url" placeholder="URL Sibagi (cth: https://sibagi.com/nama_akun)"
-          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
         <input id="goalExtIn" type="number" min="0" step="1000" placeholder="Total Donasi Sibagi / Dana Luar (Rp)"
-          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
-        <button class="bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-lg py-2 text-sm font-bold">💾 Simpan Target &amp; Sibagi</button>
+          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
+        <button class="bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl py-2.5 text-sm font-bold">💾 Simpan Target &amp; Sibagi</button>
         <p id="goalMsg" class="hidden text-xs"></p>
       </form>
     </section>
 
-    <!-- Expenses -->
-    <section class="mb-6">
-      <h2 class="font-semibold mb-2 text-sm">🧾 Pengeluaran</h2>
-      <form id="fExp" class="bg-slate-800 border border-slate-700 rounded-xl p-3 mb-3 grid gap-2">
+    <!-- 3. Pencatatan Pengeluaran Kas -->
+    <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
+      <h2 class="font-semibold mb-3 text-sm border-l-2 border-rose-500 pl-2.5">🧾 Pencatatan Pengeluaran Kas</h2>
+      <form id="fExp" class="grid gap-2 mb-3">
         <input id="expDesc" placeholder="Deskripsi (cth: Beli konsumsi rapat)" required
-          class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
         <div class="grid grid-cols-2 gap-2">
           <input id="expAmt" type="number" min="1" step="500" placeholder="Nominal (Rp)" required
-            class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+            class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
           <input id="expDate" type="date" required
-            class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+            class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
         </div>
-        <button class="bg-emerald-600 hover:bg-emerald-500 rounded-lg py-2 text-sm font-semibold">+ Tambah pengeluaran</button>
+        <button class="bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 text-sm font-semibold">+ Tambah pengeluaran</button>
       </form>
       <div id="expList" class="space-y-2"></div>
     </section>
 
-    <!-- Members -->
-    <section>
-      <h2 class="font-semibold mb-2 text-sm">👥 Anggota</h2>
+    <!-- 4. Daftar & Tambah Anggota -->
+    <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4">
+      <h2 class="font-semibold mb-3 text-sm border-l-2 border-sky-500 pl-2.5">👥 Daftar &amp; Tambah Anggota</h2>
       <form id="fMem" class="flex gap-2 mb-3">
         <input id="memName" placeholder="Nama anggota baru" required
-          class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
-        <button class="bg-emerald-600 hover:bg-emerald-500 rounded-lg px-4 text-sm font-semibold">+ Tambah</button>
+          class="flex-1 bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
+        <button class="bg-emerald-600 hover:bg-emerald-500 rounded-xl px-5 py-2.5 text-sm font-semibold">+ Tambah</button>
       </form>
       <div id="memList" class="flex flex-wrap gap-1.5"></div>
     </section>
@@ -329,11 +334,11 @@ function render() {
   ex.innerHTML = d.expenses.length ? '' : '<div class="text-slate-500 text-sm">Belum ada pengeluaran.</div>';
   d.expenses.forEach(e => {
     const div = document.createElement('div');
-    div.className = 'bg-slate-800 border border-slate-700 rounded-xl px-3 py-2 flex justify-between items-center gap-2';
-    div.innerHTML = `<div><div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500">${tglID(e.expense_date)} &bull; ${rp(e.amount)}</div></div>`;
+    div.className = 'rounded-xl border border-slate-800/70 bg-slate-950/60 px-3.5 py-2 flex justify-between items-center gap-2';
+    div.innerHTML = `<div><div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500 tabular-nums">${tglID(e.expense_date)} &bull; ${rp(e.amount)}</div></div>`;
     const del = document.createElement('button');
     del.textContent = '🗑';
-    del.className = 'px-2 py-1 rounded-lg bg-rose-900/40 border border-rose-800 text-sm';
+    del.className = 'px-2.5 py-1.5 rounded-xl bg-rose-950/60 border border-rose-800/60 text-sm';
     del.onclick = async () => {
       if (!confirm(`Hapus pengeluaran "${e.description}" (${rp(e.amount)})?`)) return;
       const r = await fetch('/api/expenses/' + e.id, { method: 'DELETE', headers: auth() });
@@ -409,7 +414,7 @@ document.getElementById('btnLogout').onclick = logout;
 document.getElementById('btnWA').onclick = e => {
   const t = buildWAText();
   if (!t) return;
-  copyText(t, e.currentTarget, '✓ Tersalin ke Clipboard!');
+  copyText(t, e.currentTarget, '✓ Tersalin!');
 };
 
 document.getElementById('pillAll').onclick = () => {
