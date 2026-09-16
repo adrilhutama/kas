@@ -97,11 +97,11 @@
       <form id="fGoal" class="grid gap-2">
         <input id="goalTitleIn" placeholder="Nama/Judul Target (cth: Acara Makan Regu)" required
           class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-        <input id="goalTargetIn" type="number" min="1" step="1000" placeholder="Target Nominal (Rp)" required
+        <input id="goalTargetIn" type="number" min="1" step="1" placeholder="Target Nominal (Rp)" required
           class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
         <input id="goalUrlIn" type="url" placeholder="URL Sibagi (cth: https://sibagi.com/nama_akun)"
           class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-        <input id="goalExtIn" type="number" min="0" step="1000" placeholder="Total Donasi Sibagi / Dana Luar (Rp)"
+        <input id="goalExtIn" type="number" min="0" step="1" placeholder="Total Donasi Sibagi / Dana Luar (Rp)"
           class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
         <button class="bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl py-2.5 text-sm font-bold">💾 Simpan Target &amp; Sibagi</button>
         <p id="goalMsg" class="hidden text-xs"></p>
@@ -115,7 +115,7 @@
         <input id="expDesc" placeholder="Deskripsi (cth: Beli konsumsi rapat)" required
           class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
         <div class="grid grid-cols-2 gap-2">
-          <input id="expAmt" type="number" min="1" step="500" placeholder="Nominal (Rp)" required
+          <input id="expAmt" type="number" min="1" step="1" placeholder="Nominal (Rp)" required
             class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
           <input id="expDate" type="date" required
             class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
@@ -147,7 +147,7 @@
         <button data-chip="50000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 50rb</button>
         <button data-chip="100000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 100rb</button>
       </div>
-      <input id="payAmt" type="number" min="1" step="500" inputmode="numeric" placeholder="Nominal (Rp)"
+      <input id="payAmt" type="number" min="1" step="1" inputmode="numeric" placeholder="Nominal (Rp)"
         class="w-full bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
       <p id="payModalErr" class="hidden text-rose-400 text-xs mt-1.5"></p>
       <div class="grid gap-2 mt-3">
