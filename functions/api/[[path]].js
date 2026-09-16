@@ -95,7 +95,11 @@ async function getSummary(url, env) {
   }
   const paidSet = new Set(payRows.map((r) => `${r.member_id}|${r.month_period}`));
   const totals = {};
-  for (const r of payRows) totals[r.member_id] = (totals[r.member_id] || 0) + (r.amount || 0);
+  const amounts = {}; // member_id -> { month_period: amount } — nominal per sel
+  for (const r of payRows) {
+    totals[r.member_id] = (totals[r.member_id] || 0) + (r.amount || 0);
+    (amounts[r.member_id] ||= {})[r.month_period] = r.amount ?? 0;
+  }
 
   const matrix = members.map((m) => {
     const paid = {};
@@ -113,6 +117,7 @@ async function getSummary(url, env) {
       paid_count,
       unpaid_count: months.length - paid_count,
       total_paid: totals[m.id] || 0,
+      amounts: amounts[m.id] || {},
     };
   });
 
@@ -120,11 +125,11 @@ async function getSummary(url, env) {
     "SELECT id, description, amount, expense_date FROM expenses ORDER BY expense_date DESC, id DESC"
   ).all();
 
-  // Per-month income for small stat row
+  // Per-month income for small stat row (sums actual amounts incl. custom nominal)
   const perMonth = months.map((mo) => {
-    let count = 0;
-    for (const r of payRows) if (r.month_period === mo) count++;
-    return { month: mo, count, total: count * MONTH_FEE };
+    let count = 0, total = 0;
+    for (const r of payRows) if (r.month_period === mo) { count++; total += r.amount || 0; }
+    return { month: mo, count, total };
   });
 
   return json({
@@ -188,7 +193,9 @@ export async function onRequest(context) {
       return json({ error: "Unauthorized." }, 401);
     }
 
-    // --- Toggle payment ---
+    // --- Toggle payment (with optional custom amount) ---
+    // POST /api/payments/toggle { member_id, month_period, status, amount? }
+    // amount omitted/invalid -> MONTH_FEE; fournit -> validated positive int, cap 100jt
     if (method === "POST" && path === "payments/toggle") {
       let body = {};
       try {
@@ -199,6 +206,14 @@ export async function onRequest(context) {
       const member_id = Number(body.member_id);
       const month_period = String(body.month_period || "");
       const status = body.status === true || body.status === 1 || body.status === "true";
+      let amount = MONTH_FEE;
+      if (body.amount !== undefined && body.amount !== null && body.amount !== "") {
+        amount = Number(body.amount);
+        if (!Number.isInteger(amount) || amount <= 0)
+          return json({ error: "Nominal harus angka bulat > 0." }, 400);
+        if (amount > 100_000_000)
+          return json({ error: "Nominal maksimal Rp 100.000.000." }, 400);
+      }
 
       if (!Number.isInteger(member_id) || member_id <= 0)
         return json({ error: "member_id tidak valid." }, 400);
@@ -211,10 +226,11 @@ export async function onRequest(context) {
       if (!member) return json({ error: "Member tidak ditemukan." }, 404);
 
       if (status) {
+        // UPSERT: custom nominal menimpa nilai lama di sel yang sama
         await env.DB.prepare(
-          "INSERT OR IGNORE INTO payments (member_id, month_period, amount) VALUES (?, ?, ?)"
+          "INSERT INTO payments (member_id, month_period, amount) VALUES (?, ?, ?) ON CONFLICT(member_id, month_period) DO UPDATE SET amount = excluded.amount"
         )
-          .bind(member_id, month_period, MONTH_FEE)
+          .bind(member_id, month_period, amount)
           .run();
       } else {
         await env.DB.prepare(
@@ -223,7 +239,7 @@ export async function onRequest(context) {
           .bind(member_id, month_period)
           .run();
       }
-      return json({ ok: true, member_id, month_period, status });
+      return json({ ok: true, member_id, month_period, status, amount: status ? amount : 0 });
     }
 
     // --- Add expense ---

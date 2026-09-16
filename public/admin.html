@@ -136,6 +136,27 @@
       <div id="memList" class="flex flex-wrap gap-1.5"></div>
     </section>
   </div>
+
+  <!-- Custom nominal modal -->
+  <div id="payModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+    <div class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5">
+      <div id="payModalTitle" class="font-semibold text-sm mb-3">Setor Iuran</div>
+      <div class="flex flex-wrap gap-1.5 mb-2">
+        <button data-chip="10000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 10rb</button>
+        <button data-chip="20000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 20rb</button>
+        <button data-chip="50000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 50rb</button>
+        <button data-chip="100000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 100rb</button>
+      </div>
+      <input id="payAmt" type="number" min="1" step="500" inputmode="numeric" placeholder="Nominal (Rp)"
+        class="w-full bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
+      <p id="payModalErr" class="hidden text-rose-400 text-xs mt-1.5"></p>
+      <div class="grid gap-2 mt-3">
+        <button id="btnSavePay" class="bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 text-sm font-bold">💾 Simpan Setoran</button>
+        <button id="btnClearPay" class="border border-rose-800/60 bg-rose-950/50 hover:bg-rose-900/50 text-rose-300 rounded-xl py-2 text-xs">Jadikan belum lunas</button>
+        <button id="btnCancelPay" class="text-slate-500 hover:text-slate-300 text-xs py-1">Batal</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -325,10 +346,14 @@ function render() {
     let html = `<td class="px-3 py-2 font-medium${dim}">${m.name}</td>`;
     d.months.forEach(mo => {
       const paid = m.paid[mo];
+      const amt = paid ? Number((m.amounts || {})[mo] ?? fee) : 0;
       const nowCls = mo === THIS_MONTH ? ' bg-amber-400/5' : '';
-      html += `<td class="px-3 py-2 text-center${nowCls}"><span data-mid="${m.id}" data-mo="${mo}" data-paid="${paid ? 1 : 0}" class="tgl inline-block px-2.5 py-0.5 rounded-full text-xs border ` +
-        (paid ? 'bg-emerald-900/60 border-emerald-700 text-emerald-300">✓'
-              : 'bg-slate-900 border-slate-700 text-slate-500">–') + '</span></td>';
+      const custom = paid && amt !== fee;
+      const label = paid ? (custom ? '✓ ' + shortAmt(amt) : '✓') : '–';
+      html += `<td class="px-3 py-2 text-center${nowCls}"><span data-mid="${m.id}" data-mo="${mo}" data-paid="${paid ? 1 : 0}" data-amt="${amt}" title="${paid ? rp(amt) : 'Belum lunas — ketuk untuk lunas Rp 10.000, pensil untuk nominal kustom'}" class="tgl inline-block px-2.5 py-0.5 rounded-full text-xs border ` +
+        (paid ? (custom ? 'bg-emerald-800/80 border-amber-500/60 text-amber-200">' : 'bg-emerald-900/60 border-emerald-700 text-emerald-300">')
+              : 'bg-slate-900 border-slate-700 text-slate-500">') + label + '</span>' +
+        ` <button data-edit="${m.id}|${mo}" title="Nominal kustom" class="text-slate-500 hover:text-amber-300 text-xs px-1">✏️</button></td>`;
     });
     html += `<td data-total-for="${m.id}" data-total="${total}" class="px-3 py-2 text-right font-mono font-bold text-amber-400 whitespace-nowrap">${rp(total)}</td>`;
     tr.innerHTML = html;
@@ -336,6 +361,14 @@ function render() {
   });
   body.querySelectorAll('.tgl').forEach(el => {
     el.onclick = () => togglePay(Number(el.dataset.mid), el.dataset.mo, el.dataset.paid !== '1');
+  });
+  body.querySelectorAll('[data-edit]').forEach(btn => {
+    btn.onclick = e => {
+      e.stopPropagation();
+      const [mid, mo] = btn.dataset.edit.split('|');
+      const m = (DATA.members || []).find(x => String(x.id) === String(mid));
+      openPayModal(m, mo);
+    };
   });
 
   // expenses
@@ -382,31 +415,65 @@ function render() {
 }
 
 // ---------- Actions ----------
-async function togglePay(member_id, month_period, status) {
+let PAY_TARGET = null; // { member_id, month_period, name }
+const shortAmt = a => a >= 1000 && a % 1000 === 0 ? (a / 1000) + 'k' : String(a);
+
+function badgeCls(paid, amt, fee) {
+  if (!paid) return 'bg-slate-900 border-slate-700 text-slate-500';
+  return amt !== fee
+    ? 'bg-emerald-800/80 border-amber-500/60 text-amber-200'
+    : 'bg-emerald-900/60 border-emerald-700 text-emerald-300';
+}
+function badgeLabel(paid, amt, fee) {
+  if (!paid) return '–';
+  return amt !== fee ? '✓ ' + shortAmt(amt) : '✓';
+}
+
+async function togglePay(member_id, month_period, status, amount) {
   showErr(null);
+  const fee = (DATA && DATA.month_fee) || 10000;
+  const amt = amount === undefined ? fee : amount;
+  const el = document.querySelector(`.tgl[data-mid="${member_id}"][data-mo="${month_period}"]`);
+  const oldPaid = el ? el.dataset.paid === '1' : false;
+  const oldAmt = el ? Number(el.dataset.amt || 0) : 0;
   const r = await fetch('/api/payments/toggle', {
     method: 'POST', headers: auth(),
-    body: JSON.stringify({ member_id, month_period, status })
+    body: JSON.stringify({ member_id, month_period, status, amount: status ? amt : undefined })
   });
   if (r.status === 401) return logout();
   if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menyimpan.'); }
   // instant UI flip (badge + Total Bayar), then re-sync
-  const el = document.querySelector(`.tgl[data-mid="${member_id}"][data-mo="${month_period}"]`);
   if (el) {
     el.dataset.paid = status ? '1' : '0';
-    el.className = 'tgl inline-block px-2.5 py-0.5 rounded-full text-xs border ' +
-      (status ? 'bg-emerald-900/60 border-emerald-700 text-emerald-300">✓'
-              : 'bg-slate-900 border-slate-700 text-slate-500">–');
-    el.textContent = status ? '✓' : '–';
-    const fee = (DATA && DATA.month_fee) || 10000;
+    el.dataset.amt = status ? String(amt) : '0';
+    el.title = status ? rp(amt) : 'Belum lunas';
+    el.className = 'tgl inline-block px-2.5 py-0.5 rounded-full text-xs border ' + badgeCls(status, amt, fee);
+    el.textContent = badgeLabel(status, amt, fee);
     const tc = document.querySelector(`[data-total-for="${member_id}"]`);
     if (tc) {
-      const cur = Number(tc.dataset.total || 0) + (status ? fee : -fee);
+      const cur = Number(tc.dataset.total || 0) - (oldPaid ? oldAmt : 0) + (status ? amt : 0);
       tc.dataset.total = Math.max(0, cur);
       tc.textContent = rp(tc.dataset.total);
     }
   }
   load();
+}
+
+function openPayModal(m, mo) {
+  if (!m) return;
+  const fee = (DATA && DATA.month_fee) || 10000;
+  PAY_TARGET = { member_id: m.id, month_period: mo, name: m.name };
+  document.getElementById('payModalTitle').textContent =
+    `Setor Iuran ${m.name} – ${namaBulan(mo)}`;
+  document.getElementById('payModalErr').classList.add('hidden');
+  document.getElementById('payAmt').value = m.paid[mo] ? Number((m.amounts || {})[mo] ?? fee) : fee;
+  const pm = document.getElementById('payModal');
+  pm.classList.remove('hidden');
+  setTimeout(() => document.getElementById('payAmt').focus(), 50);
+}
+function closePayModal() {
+  PAY_TARGET = null;
+  document.getElementById('payModal').classList.add('hidden');
 }
 
 function logout() {
@@ -419,6 +486,43 @@ function logout() {
 document.getElementById('btnLogin').onclick = doLogin;
 document.getElementById('pw').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 document.getElementById('btnLogout').onclick = logout;
+
+document.querySelectorAll('.payChip').forEach(c => {
+  c.onclick = () => { document.getElementById('payAmt').value = c.dataset.chip; };
+});
+document.getElementById('btnSavePay').onclick = async () => {
+  if (!PAY_TARGET) return;
+  const err = document.getElementById('payModalErr');
+  err.classList.add('hidden');
+  const v = Number(document.getElementById('payAmt').value);
+  if (!Number.isInteger(v) || v <= 0) {
+    err.textContent = 'Nominal harus angka bulat > 0.';
+    err.classList.remove('hidden');
+    return;
+  }
+  if (v > 100_000_000) {
+    err.textContent = 'Nominal maksimal Rp 100.000.000.';
+    err.classList.remove('hidden');
+    return;
+  }
+  const t = PAY_TARGET;
+  closePayModal();
+  await togglePay(t.member_id, t.month_period, true, v);
+};
+document.getElementById('btnClearPay').onclick = async () => {
+  if (!PAY_TARGET) return;
+  const t = PAY_TARGET;
+  closePayModal();
+  await togglePay(t.member_id, t.month_period, false);
+};
+document.getElementById('btnCancelPay').onclick = closePayModal;
+document.getElementById('payModal').onclick = e => {
+  if (e.target.id === 'payModal') closePayModal();
+};
+document.getElementById('payAmt').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('btnSavePay').click();
+  if (e.key === 'Escape') closePayModal();
+});
 
 document.getElementById('btnWA').onclick = e => {
   const t = buildWAText();
