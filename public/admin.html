@@ -64,6 +64,7 @@
       </div>
       <div class="flex gap-1.5">
         <button id="btnWA" class="text-xs px-3 py-1.5 rounded-full border border-emerald-700/60 bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/60">📋 Salin Rekap WA</button>
+        <button id="btnGenImage" class="text-xs font-semibold px-3 py-1.5 rounded-full border border-amber-600/50 bg-amber-700/20 text-amber-300 hover:bg-amber-700/40">📸 Buat Gambar Laporan</button>
         <button id="btnLogout" class="text-xs px-3 py-1.5 rounded-full border border-slate-700/70 bg-slate-800/60 text-slate-400 hover:text-slate-200">Keluar</button>
       </div>
     </div>
@@ -154,6 +155,23 @@
         <button id="btnSavePay" class="bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 text-sm font-bold">💾 Simpan Setoran</button>
         <button id="btnClearPay" class="border border-rose-800/60 bg-rose-950/50 hover:bg-rose-900/50 text-rose-300 rounded-xl py-2 text-xs">Jadikan belum lunas</button>
         <button id="btnCancelPay" class="text-slate-500 hover:text-slate-300 text-xs py-1">Batal</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image report preview modal -->
+  <div id="imageModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+    <div class="w-full max-w-md">
+      <div class="rounded-2xl border border-slate-700 bg-slate-900 p-4 flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="font-semibold text-sm text-slate-200">📸 Preview Laporan</span>
+          <button id="btnCloseImage" class="text-slate-500 hover:text-slate-200 text-lg leading-none">&times;</button>
+        </div>
+        <canvas id="reportCanvas" class="w-full rounded-xl border border-slate-700" width="540" height="960"></canvas>
+        <div class="flex gap-2">
+          <button id="btnDownloadImg" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded-xl">📥 Unduh PNG</button>
+          <button id="btnCopyImg" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold py-2 rounded-xl">📋 Salin Gambar</button>
+        </div>
       </div>
     </div>
   </div>
@@ -615,6 +633,225 @@ if (TOKEN) enter();
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
 }
+
+// ---------- Report Image Generator (9:16, 1080×1920, native canvas) ----------
+const RPT_C = {
+  bg: '#020617', card: '#0f172a', stroke: '#1e293b',
+  text: '#f1f5f9', mute: '#94a3b8', emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+};
+const FULL_BULAN = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
+
+function rptRoundRect(ctx, x, y, w, h, r) {
+  r = Math.max(0, Math.min(r, w / 2, h / 2));
+  ctx.beginPath();
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// Status badge for the report matrix: hijau Lunas / amber nominal kustom / merah belum
+function rptStatus(m) {
+  const C = RPT_C;
+  const mos = ACTIVE.length ? ACTIVE : [THIS_MONTH];
+  if (m.is_active === 0) return { label: 'NONAKTIF', color: C.mute };
+  const pc = mos.filter(mo => m.paid[mo]).length;
+  if (pc === 0) return { label: 'BELUM', color: C.rose };
+  const fee = (DATA && DATA.month_fee) || 10000;
+  if (mos.length === 1) {
+    const amt = Number((m.amounts || {})[mos[0]] ?? fee);
+    return amt !== fee
+      ? { label: 'RP ' + String(shortAmt(amt)).toUpperCase(), color: C.amber }
+      : { label: 'LUNAS', color: C.emerald };
+  }
+  return pc === mos.length
+    ? { label: 'LUNAS', color: C.emerald }
+    : { label: pc + '/' + mos.length + ' LUNAS', color: C.amber };
+}
+
+function generateReportCanvas(d, canvas) {
+  const ctx = canvas.getContext('2d');
+  const C = RPT_C, W = 1080, H = 1920, PX = 48;
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // --- 1. Header ---
+  ctx.fillStyle = '#064e3b';
+  rptRoundRect(ctx, PX, 56, W - PX * 2, 56, 12);
+  ctx.fill();
+  ctx.fillStyle = C.emerald;
+  ctx.font = '600 28px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('REGU 3 • LAPORAN OPERASIONAL KAS', W / 2, 92);
+
+  const mos = ACTIVE.length ? ACTIVE : [THIS_MONTH];
+  const [yy, mm] = mos[0].split('-');
+  const periodTitle = mos.length === 1
+    ? 'REKAPITULASI BULAN ' + FULL_BULAN[Number(mm) - 1] + ' ' + yy
+    : 'REKAPITULASI PERIODE ' + mos.map(x => FULL_BULAN[Number(x.split('-')[1]) - 1]).join(' / ') + ' ' + yy;
+  ctx.fillStyle = C.text;
+  ctx.font = 'bold 48px system-ui, sans-serif';
+  ctx.fillText(periodTitle, W / 2, 168);
+  ctx.fillStyle = C.mute;
+  ctx.font = '28px system-ui, sans-serif';
+  ctx.fillText('Dicetak ' + tglID(new Date().toISOString().slice(0, 10)), W / 2, 212);
+
+  // --- 2. Kartu statistik utama ---
+  const cardY = 256, cardH = 180, gap = 20;
+  const cardW = (W - PX * 2 - gap * 2) / 3;
+  const pm = (d.per_month || []).filter(p => mos.includes(p.month));
+  const masuk = pm.length ? pm.reduce((s, p) => s + (p.total || 0), 0) : d.total_income;
+  const keluar = pm.length
+    ? ((d.expenses || []).filter(e => mos.includes(String(e.expense_date || '').slice(0, 7))).reduce((s, e) => s + (e.amount || 0), 0))
+    : d.total_expense;
+  const stats = [
+    { label: 'SALDO KAS', value: d.current_balance, color: C.emerald },
+    { label: 'TOTAL MASUK', value: masuk, color: C.amber },
+    { label: 'TOTAL KELUAR', value: keluar, color: C.rose },
+  ];
+  stats.forEach((s, i) => {
+    const cx = PX + i * (cardW + gap);
+    rptRoundRect(ctx, cx, cardY, cardW, cardH, 16);
+    ctx.fillStyle = C.card;
+    ctx.fill();
+    ctx.strokeStyle = C.stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = C.mute;
+    ctx.font = '26px system-ui, sans-serif';
+    ctx.fillText(s.label, cx + 20, cardY + 44);
+    ctx.fillStyle = s.color;
+    ctx.font = 'bold 56px system-ui, sans-serif';
+    ctx.fillText(rp(s.value), cx + 20, cardY + 130);
+  });
+
+  // --- 3. Target / Goal (jika aktif) ---
+  let y = cardY + cardH + 40;
+  if (d.goal) {
+    const g = d.goal, gw = W - PX * 2;
+    rptRoundRect(ctx, PX, y, gw, 220, 16);
+    ctx.fillStyle = C.card;
+    ctx.fill();
+    ctx.strokeStyle = C.stroke;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    const pct = Math.max(0, Math.min(100, g.percentage || 0));
+    ctx.textAlign = 'left';
+    ctx.fillStyle = C.amber;
+    ctx.font = 'bold 30px system-ui, sans-serif';
+    ctx.fillText('🎯 ' + (g.title || 'Target Dana'), PX + 28, y + 54);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = C.text;
+    ctx.font = 'bold 40px system-ui, sans-serif';
+    ctx.fillText(Math.round(pct) + '%', PX + gw - 28, y + 58);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = C.mute;
+    ctx.font = '26px system-ui, sans-serif';
+    ctx.fillText(rp(g.total_collected) + '  terkumpul dari target  ' + rp(g.target_amount), PX + 28, y + 104);
+    const barX = PX + 28, barY = y + 132, barW = gw - 56, barH = 30;
+    rptRoundRect(ctx, barX, barY, barW, barH, barH / 2);
+    ctx.fillStyle = C.stroke;
+    ctx.fill();
+    if (pct > 0) {
+      rptRoundRect(ctx, barX, barY, Math.max(barH, barW * pct / 100), barH, barH / 2);
+      ctx.fillStyle = C.emerald;
+      ctx.fill();
+    }
+    ctx.fillStyle = C.mute;
+    ctx.font = '24px system-ui, sans-serif';
+    ctx.fillText('Sisa ' + rp(g.remaining), PX + 28, y + 198);
+    y += 260;
+  }
+
+  // --- 4. Matriks ringkas anggota (2 kolom) ---
+  ctx.textAlign = 'left';
+  ctx.fillStyle = C.mute;
+  ctx.font = 'bold 30px system-ui, sans-serif';
+  ctx.fillText('STATUS ANGGOTA (' + (d.members || []).length + ')', PX, y + 8);
+  y += 52;
+  const cellH = 76, cellGap = 12;
+  const cellW = (W - PX * 2 - cellGap) / 2;
+  (d.members || []).forEach((m, i) => {
+    const cx = PX + (i % 2) * (cellW + cellGap);
+    const cy = y + Math.floor(i / 2) * (cellH + cellGap);
+    const st = rptStatus(m);
+    rptRoundRect(ctx, cx, cy, cellW, cellH, 12);
+    ctx.fillStyle = C.card;
+    ctx.fill();
+    ctx.strokeStyle = st.color === C.emerald ? '#0f766e' : st.color === C.rose ? '#be123c' : st.color === C.amber ? '#92400e' : '#334155';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.textAlign = 'left';
+    ctx.fillStyle = C.text;
+    ctx.font = 'bold 30px system-ui, sans-serif';
+    ctx.fillText(String(m.name).toUpperCase(), cx + 18, cy + 34);
+    ctx.fillStyle = C.mute;
+    ctx.font = '22px system-ui, sans-serif';
+    ctx.fillText(m.is_active === 0 ? 'nonaktif' : 'regu 3', cx + 18, cy + 62);
+    // badge status
+    ctx.font = 'bold 24px system-ui, sans-serif';
+    const bw = ctx.measureText(st.label).width + 36;
+    const bx = cx + cellW - bw - 14;
+    rptRoundRect(ctx, bx, cy + 14, bw, 48, 10);
+    ctx.fillStyle = st.color === C.emerald ? '#064e3b' : st.color === C.rose ? '#4c0519' : st.color === C.amber ? '#451a03' : '#1e293b';
+    ctx.fill();
+    ctx.fillStyle = st.color;
+    ctx.fillText(st.label, bx + 18, cy + 46);
+  });
+  y += Math.ceil((d.members || []).length / 2) * (cellH + cellGap);
+
+  // --- 5. Footer ---
+  ctx.fillStyle = C.mute;
+  ctx.font = '26px system-ui, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('Dikelola transparan via Sistem Kas & Operasional Regu 3', W / 2, H - 88);
+  ctx.font = '22px system-ui, sans-serif';
+  ctx.fillText(location.hostname, W / 2, H - 52);
+}
+
+// Wire up handlers
+document.getElementById('btnGenImage').onclick = () => {
+  if (!DATA) return alert('Tunggu data termuat.');
+  const pc = document.getElementById('reportCanvas');
+  pc.width = 1080;
+  pc.height = 1920;
+  generateReportCanvas(DATA, pc);
+  document.getElementById('btnCopyImg').textContent = '📋 Salin Gambar';
+  document.getElementById('imageModal').classList.remove('hidden');
+};
+document.getElementById('btnCloseImage').onclick = () => document.getElementById('imageModal').classList.add('hidden');
+document.getElementById('imageModal').onclick = e => { if (e.target.id === 'imageModal') document.getElementById('imageModal').classList.add('hidden'); };
+document.getElementById('btnDownloadImg').onclick = () => {
+  const pc = document.getElementById('reportCanvas');
+  if (!pc.width) return;
+  const fname = 'kas-regu-3-rekap-' + (ACTIVE.length ? ACTIVE.join('_') : THIS_MONTH) + '.png';
+  pc.toBlob(b => {
+    if (!b) return showErr('Gagal membuat gambar.');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = fname;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }, 'image/png');
+};
+document.getElementById('btnCopyImg').onclick = async () => {
+  const pc = document.getElementById('reportCanvas');
+  if (!pc.width) return;
+  try {
+    // promise-form Blob required: some Safari builds reject a plain blob in ClipboardItem
+    const img = pc.toBlob ? (() => new Promise((res, rej) => pc.toBlob(b => b ? res(b) : rej(new Error('render gagal')), 'image/png')))() : null;
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': img })]);
+    const b = document.getElementById('btnCopyImg');
+    b.textContent = '✓ Tersalin!';
+    setTimeout(() => { b.textContent = '📋 Salin Gambar'; }, 2000);
+  } catch (e) {
+    // fallback: browser tanpa ClipboardItem image (mis. non-HTTPS) -> unduh PNG
+    document.getElementById('btnDownloadImg').click();
+    showErr('Salin gambar tidak didukung browser ini — PNG diunduh sebagai gantinya.');
+  }
+};
 </script>
 </body>
 </html>

@@ -9,7 +9,7 @@ KAS REGU 3 — a cash/dues tracker for a 13-person team. Static dark-mode pages 
 ## Files (the whole app)
 
 - `public/index.html` — public read-only view (stats, payment accordion + QRIS, savings goal, matrix, expenses)
-- `public/admin.html` — admin dashboard behind a login barrier (WA recap share, toggle payments + custom nominal modal, CRUD expenses/members/goal)
+- `public/admin.html` — admin dashboard behind a login barrier (WA recap share, 📸 report image generator: 1080×1920 native-canvas rekap infografis + PNG download / copy-image via `ClipboardItem`, toggle payments + custom nominal modal, CRUD expenses/members/goal)
 - `public/spin.html` — "Roda Backup Libur" wheel: canvas + Web Audio tick/clack/fanfare, segment-engine settle physics with 10 random scenarios + velocity-based pin collision, stealth admin target-lock (no visible admin UI), winner modal + WA copy
 - `public/manifest.json` + `public/sw.js` + `public/icon.svg` + `public/icons/` + `public/qris.png` — PWA shell (SW precaches app shell including `/qris.png`, never `/api/*`)
 - `functions/api/[[path]].js` — the entire backend: one catch-all router for all `/api/*` routes
