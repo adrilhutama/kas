@@ -188,6 +188,7 @@ export async function onRequest(context) {
       (method === "POST" && path === "expenses") ||
       (method === "DELETE" && path.startsWith("expenses/")) ||
       (method === "POST" && path === "members") ||
+      (method === "DELETE" && path.startsWith("members/")) ||
       (method === "POST" && path === "goal/update") ||
       (method === "PATCH" && path.startsWith("members/"));
 
@@ -318,6 +319,23 @@ export async function onRequest(context) {
         return json({ ok: true, id, is_active });
       }
       return json({ error: "Kirim { name } atau { id, is_active }." }, 400);
+    }
+
+    // --- Delete member permanently ---
+    // DELETE /api/members/:id  →  deletes all payments + member row
+    if (method === "DELETE" && path.startsWith("members/")) {
+      const id = Number(path.split("/")[1]);
+      if (!Number.isInteger(id) || id <= 0)
+        return json({ error: "ID tidak valid." }, 400);
+      const member = await env.DB.prepare("SELECT id FROM members WHERE id = ?")
+        .bind(id)
+        .first();
+      if (!member) return json({ error: "Member tidak ditemukan." }, 404);
+      await env.DB.prepare("DELETE FROM payments WHERE member_id = ?")
+        .bind(id).run();
+      await env.DB.prepare("DELETE FROM members WHERE id = ?")
+        .bind(id).run();
+      return json({ success: true, id });
     }
 
     // --- Upsert savings goal (single active row) ---

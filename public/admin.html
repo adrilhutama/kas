@@ -444,6 +444,23 @@ function render() {
       load();
     };
     ml.appendChild(b);
+
+    // Delete button (trash icon) — always visible for all members
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '🗑️';
+    delBtn.title = 'Hapus permanen [' + m.name + '] (semua data iuran ikut terhapus)';
+    delBtn.className = 'px-1.5 py-1 rounded-full text-xs border border-rose-700/40 bg-rose-950/30 text-rose-400 hover:bg-rose-900/60 hover:text-rose-200 ml-1';
+    delBtn.onclick = async (ev) => {
+      ev.stopPropagation();
+      if (!confirm('Yakin ingin menghapus permanen ' + m.name + '?\nSemua data iuran terkait anggota ini akan ikut terhapus.')) return;
+      const r = await fetch('/api/members/' + m.id, {
+        method: 'DELETE', headers: auth()
+      });
+      if (r.status === 401) return logout();
+      if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menghapus.'); }
+      load();
+    };
+    ml.appendChild(delBtn);
   });
 }
 
@@ -819,16 +836,17 @@ function generateReportCanvas(d, canvas) {
     y += 260;
   }
 
-  // --- 4. Matriks ringkas anggota (2 kolom) ---
+  // --- 4. Matriks ringkas anggota (2 kolom) — hanya yang aktif; nonaktif/terhapus tidak ikut tampil ---
+  const actives = (d.members || []).filter(m => m.is_active !== 0);
   ctx.textAlign = 'left';
   ctx.fillStyle = C.mute;
   ctx.font = 'bold 30px system-ui, sans-serif';
-  ctx.fillText('STATUS ANGGOTA (' + (d.members || []).length + ')', PX, y + 8);
+  ctx.fillText('STATUS ANGGOTA (' + actives.length + ')', PX, y + 8);
   y += 52;
   const cellH = 76, cellGap = 12;
   const cellW = (W - PX * 2 - cellGap) / 2;
-  (d.members || []).forEach((m, i) => {
-    const total = (d.members || []).length;
+  actives.forEach((m, i) => {
+    const total = actives.length;
     const isLastAndOdd = (i === total - 1 && total % 2 === 1);
     const cx = isLastAndOdd ? PX : PX + (i % 2) * (cellW + cellGap);
     const cw = isLastAndOdd ? cellW * 2 + cellGap : cellW;
@@ -857,7 +875,7 @@ function generateReportCanvas(d, canvas) {
     ctx.fillStyle = st.color;
     ctx.fillText(st.label, bx + 18, cy + 46);
   });
-  y += Math.ceil((d.members || []).length / 2) * (cellH + cellGap);
+  y += Math.ceil(actives.length / 2) * (cellH + cellGap);
 
   // --- 5. Footer ---
   ctx.fillStyle = C.mute;
