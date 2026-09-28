@@ -27,6 +27,7 @@ node --check 'functions/api/[[path]].js'
 
 # syntax-check an inline page script: extract <script>...</script> to a temp file, then node --check it
 node -e "const fs=require('fs');const h=fs.readFileSync('public/spin.html','utf8');const m=[...h.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x=>x[1]).join('\n');fs.writeFileSync(process.env.CLAUDE_JOB_DIR+'/tmp/spin-check.js',m);" && node --check "$CLAUDE_JOB_DIR/tmp/spin-check.js"
+# (ganti spin.html dengan admin.html / index.html untuk halaman lain)
 
 # D1 ops
 wrangler d1 execute kas_regu_3 --file=./schema.sql
@@ -73,3 +74,4 @@ There is no build, lint, or test suite. Verification = `node --check` (+ numeric
 - **Bump `CACHE` in `sw.js`** whenever the precached shell changes (currently `kas-regu-3-v2`), or installed PWAs keep serving the old assets.
 - Clipboard uses `navigator.clipboard` with a `textarea`+`execCommand` fallback for non-HTTPS/old browsers.
 - Git Bash quoting is fragile: grep page IDs as `id="x"` (no backslash-escaped quotes), and quote the bracket API filename in `node --check`.
+- **Nominal `<input type="number">` must keep `step="1"`** (all four in `admin.html`: `#expAmt`, `#payAmt`, `#goalTargetIn`, `#goalExtIn`). `step="500"`/`step="1000"` combined with `min` made browsers reject valid integers (e.g. 122000 failed with "nearest valid values are 121501 and 122001"). Integer>0 enforcement lives in JS + backend validation, not in `step`.
