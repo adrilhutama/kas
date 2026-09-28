@@ -129,9 +129,12 @@
     <!-- 4. Daftar & Tambah Anggota -->
     <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4">
       <h2 class="font-semibold mb-3 text-sm border-l-2 border-sky-500 pl-2.5">👥 Daftar &amp; Tambah Anggota</h2>
-      <form id="fMem" class="flex gap-2 mb-3">
+      <form id="fMem" class="flex gap-2 mb-3 items-center">
         <input id="memName" placeholder="Nama anggota baru" required
           class="flex-1 bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
+        <input id="memStartMonth" type="month" value="" min="2026-07"
+          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3 py-2.5 text-sm text-slate-300 outline-none focus:border-emerald-500 w-[160px]"
+          title="Bulan wajib iuran mulai" />
         <button class="bg-emerald-600 hover:bg-emerald-500 rounded-xl px-5 py-2.5 text-sm font-semibold">+ Tambah</button>
       </form>
       <div id="memList" class="flex flex-wrap gap-1.5"></div>
@@ -194,11 +197,16 @@ let DATA = null;
 let SHOW_UNPAID_ONLY = false;
 let GOAL_PREFILLED = false;
 
+// A member owes dues only from their start_month onward (and must be active).
+// Pre-join months are exempt, not unpaid ("N/A").
+const MEMBER_START_MONTH = m => m.start_month || '2026-07';
+const IS_ELIGIBLE = (m, mo) => !!m && m.is_active !== 0 && typeof mo === 'string' && mo >= MEMBER_START_MONTH(m);
+
 function unpaidList(d) {
-  return (d.members || []).filter(m => !m.paid[THIS_MONTH]);
+  return (d.members || []).filter(m => IS_ELIGIBLE(m, THIS_MONTH) && !m.paid[THIS_MONTH]);
 }
 function paidCount(d) {
-  return (d.members || []).filter(m => m.paid[THIS_MONTH]).length;
+  return (d.members || []).filter(m => IS_ELIGIBLE(m, THIS_MONTH) && m.paid[THIS_MONTH]).length;
 }
 
 async function copyText(text, btn, doneLabel) {
@@ -341,7 +349,7 @@ function render() {
   body.innerHTML = '';
   const fee = d.month_fee || 10000;
   let rows = d.members.slice();
-  if (SHOW_UNPAID_ONLY) rows = rows.filter(m => !m.paid[THIS_MONTH]);
+  if (SHOW_UNPAID_ONLY) rows = rows.filter(m => IS_ELIGIBLE(m, THIS_MONTH) && !m.paid[THIS_MONTH]);
   const totalN = (d.members || []).length;
   document.getElementById('pillAllN').textContent = totalN;
   document.getElementById('pillUnpaidN').textContent = unpaidList(d).length;
@@ -363,9 +371,14 @@ function render() {
     const total = m.total_paid ?? (m.paid_count * fee);
     let html = `<td class="px-3 py-2 font-medium${dim}">${m.name}</td>`;
     d.months.forEach(mo => {
+      const nowCls = mo === THIS_MONTH ? ' bg-amber-400/5' : '';
+      // bulan sebelum start_month = exempt (N/A), bukan tunggakan
+      if (!IS_ELIGIBLE(m, mo)) {
+        html += `<td class="px-3 py-2 text-center${nowCls}"><span title="Mulai wajib iuran ${namaBulan(MEMBER_START_MONTH(m))}" class="inline-block px-2.5 py-0.5 rounded-full text-xs bg-slate-900/50 border border-slate-800 text-slate-600 select-none">N/A</span></td>`;
+        return;
+      }
       const paid = m.paid[mo];
       const amt = paid ? Number((m.amounts || {})[mo] ?? fee) : 0;
-      const nowCls = mo === THIS_MONTH ? ' bg-amber-400/5' : '';
       const custom = paid && amt !== fee;
       const label = paid ? (custom ? '✓ ' + shortAmt(amt) : '✓') : '–';
       html += `<td class="px-3 py-2 text-center${nowCls}"><span data-mid="${m.id}" data-mo="${mo}" data-paid="${paid ? 1 : 0}" data-amt="${amt}" title="${paid ? rp(amt) : 'Belum lunas — ketuk untuk lunas Rp 10.000, pensil untuk nominal kustom'}" class="tgl inline-block px-2.5 py-0.5 rounded-full text-xs border ` +
@@ -418,7 +431,9 @@ function render() {
     b.className = 'px-2.5 py-1 rounded-full text-xs border ' +
       (m.is_active ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-slate-900 border-slate-800 text-slate-500 line-through');
     b.textContent = (m.is_active ? '✓ ' : '') + m.name;
-    b.title = m.is_active ? 'Ketuk untuk nonaktifkan' : 'Ketuk untuk aktifkan';
+    b.title = m.is_active
+      ? `Mulai wajib: ${namaBulan(m.start_month || '2026-07')}\nKetuk untuk nonaktifkan`
+      : 'Nonaktif';
     b.onclick = async () => {
       if (!confirm((m.is_active ? 'Nonaktifkan ' : 'Aktifkan kembali ') + m.name + '?')) return;
       const r = await fetch('/api/members', {
@@ -587,15 +602,21 @@ document.getElementById('fExp').onsubmit = async e => {
 document.getElementById('fMem').onsubmit = async e => {
   e.preventDefault();
   showErr(null);
+  const smInput = document.getElementById('memStartMonth');
   const r = await fetch('/api/members', {
     method: 'POST', headers: auth(),
-    body: JSON.stringify({ name: document.getElementById('memName').value })
+    body: JSON.stringify({
+      name: document.getElementById('memName').value,
+      start_month: smInput.value || undefined
+    })
   });
   if (r.status === 401) return logout();
   if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menambah.'); }
   document.getElementById('memName').value = '';
   load();
 };
+// default "Mulai Wajib Iuran" to current month when the form is shown
+document.getElementById('memStartMonth').value = THIS_MONTH;
 
 document.getElementById('fGoal').onsubmit = async e => {
   e.preventDefault();
@@ -656,18 +677,21 @@ function rptStatus(m) {
   const C = RPT_C;
   const mos = ACTIVE.length ? ACTIVE : [THIS_MONTH];
   if (m.is_active === 0) return { label: 'NONAKTIF', color: C.mute };
-  const pc = mos.filter(mo => m.paid[mo]).length;
+  // only count months from start_month onward as mandatory
+  const reqMos = mos.filter(mo => IS_ELIGIBLE(m, mo));
+  if (reqMos.length === 0) return { label: 'BELUM', color: C.mute };
+  const pc = reqMos.filter(mo => m.paid[mo]).length;
   if (pc === 0) return { label: 'BELUM', color: C.rose };
   const fee = (DATA && DATA.month_fee) || 10000;
-  if (mos.length === 1) {
-    const amt = Number((m.amounts || {})[mos[0]] ?? fee);
+  if (reqMos.length === 1) {
+    const amt = Number((m.amounts || {})[reqMos[0]] ?? fee);
     return amt !== fee
       ? { label: 'RP ' + String(shortAmt(amt)).toUpperCase(), color: C.amber }
       : { label: 'LUNAS', color: C.emerald };
   }
-  return pc === mos.length
+  return pc === reqMos.length
     ? { label: 'LUNAS', color: C.emerald }
-    : { label: pc + '/' + mos.length + ' LUNAS', color: C.amber };
+    : { label: pc + '/' + reqMos.length + ' LUNAS', color: C.amber };
 }
 
 // Lightweight measureText shim so the generator works in headless node too.

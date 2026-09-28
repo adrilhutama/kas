@@ -78,7 +78,7 @@ async function getSummary(url, env) {
   }
 
   const membersRes = await env.DB.prepare(
-    "SELECT id, name, is_active FROM members ORDER BY id ASC"
+    "SELECT id, name, is_active, COALESCE(start_month, '2026-07') AS start_month FROM members ORDER BY id ASC"
   ).all();
   const members = membersRes.results || [];
 
@@ -105,6 +105,7 @@ async function getSummary(url, env) {
     const paid = {};
     let paid_count = 0;
     for (const mo of months) {
+      if (mo < m.start_month) continue; // bulan sebelum start_month = wajib tidak ada
       const ok = paidSet.has(`${m.id}|${mo}`);
       paid[mo] = ok;
       if (ok) paid_count++;
@@ -113,9 +114,10 @@ async function getSummary(url, env) {
       id: m.id,
       name: m.name,
       is_active: m.is_active,
+      start_month: m.start_month,
       paid,
       paid_count,
-      unpaid_count: months.length - paid_count,
+      unpaid_count: months.filter(mo => mo >= m.start_month).length - paid_count,
       total_paid: totals[m.id] || 0,
       amounts: amounts[m.id] || {},
     };
@@ -162,7 +164,7 @@ export async function onRequest(context) {
     // --- Public: member list (for admin dropdowns) ---
     if (method === "GET" && path === "members") {
       const res = await env.DB.prepare(
-        "SELECT id, name, is_active FROM members ORDER BY id ASC"
+        "SELECT id, name, is_active, COALESCE(start_month, '2026-07') AS start_month FROM members ORDER BY id ASC"
       ).all();
       return json({ members: res.results || [] });
     }
@@ -290,12 +292,20 @@ export async function onRequest(context) {
       if (body.name !== undefined) {
         const name = String(body.name || "").trim().toUpperCase();
         if (!name) return json({ error: "Nama wajib diisi." }, 400);
+        // validate optional start_month (YYYY-MM or current month fallback)
+        let startMonth = body.start_month;
+        if (!startMonth || !MONTH_RE.test(String(startMonth))) {
+          const d = new Date();
+          startMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        } else {
+          startMonth = String(startMonth);
+        }
         const res = await env.DB.prepare(
-          "INSERT INTO members (name, is_active) VALUES (?, 1)"
+          "INSERT INTO members (name, is_active, start_month) VALUES (?, 1, ?)"
         )
-          .bind(name)
+          .bind(name, startMonth)
           .run();
-        return json({ ok: true, id: res.meta?.last_row_id ?? null, name });
+        return json({ ok: true, id: res.meta?.last_row_id ?? null, name, start_month: startMonth });
       }
       if (body.id !== undefined) {
         const id = Number(body.id);

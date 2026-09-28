@@ -184,7 +184,8 @@ let CURRENT = null;      // last rendered summary payload
 let SHOW_UNPAID_ONLY = false;
 
 function unpaidList(d) {
-  return (d.members || []).filter(m => !m.paid[THIS_MONTH]);
+  const fee = (d.month_fee) || 10000;
+  return (d.members || []).filter(m => m.is_active && m.start_month && THIS_MONTH >= m.start_month && (!m.paid[THIS_MONTH] || Number((m.amounts||{})[THIS_MONTH]) !== fee));
 }
 
 async function copyText(text, btn, doneLabel) {
@@ -312,7 +313,7 @@ function render(d) {
   body.innerHTML = '';
   const fee = d.month_fee || 10000;
   let rows = d.members.slice();
-  if (SHOW_UNPAID_ONLY) rows = rows.filter(m => !m.paid[THIS_MONTH]);
+  if (SHOW_UNPAID_ONLY) rows = rows.filter(m => m.is_active && m.start_month && THIS_MONTH >= m.start_month && !m.paid[THIS_MONTH]);
   const totalN = (d.members || []).length;
   const unpaidN = unpaidList(d).length;
   document.getElementById('pillAllN').textContent = totalN;
@@ -336,6 +337,11 @@ function render(d) {
     let tds = `<td class="px-3 py-2 font-medium${dim}">${m.name}${m.is_active ? '' : ' <span class="text-[10px] text-slate-500">(nonaktif)</span>'}</td>`;
     d.months.forEach(mo => {
       const nowCls = mo === THIS_MONTH ? ' bg-amber-400/5' : '';
+      // Sebelum start_month → exempt (N/A), bukan merah belum lunas
+      if (!m.is_active || !m.start_month || mo < m.start_month) {
+        tds += `<td class="px-3 py-2 text-center${nowCls}"><span title="${!m.is_active ? 'Anggota nonaktif' : 'Mulai wajib iuran ' + namaBulan(m.start_month)}" class="inline-block px-2 py-0.5 rounded-full text-xs bg-slate-900/50 border border-slate-800 text-slate-600 select-none">N/A</span></td>`;
+        return;
+      }
       if (!m.paid[mo]) {
         tds += `<td class="px-3 py-2 text-center${nowCls}"><span class="inline-block px-2 py-0.5 rounded-full text-xs bg-rose-900/40 border border-rose-800 text-rose-400">–</span></td>`;
         return;
