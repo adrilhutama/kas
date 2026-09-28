@@ -674,10 +674,13 @@ if ('serviceWorker' in navigator) {
 
 // ---------- Report Image Generator (9:16, 1080×1920, native canvas) ----------
 const RPT_C = {
-  bg: '#020617', card: '#0f172a', stroke: '#1e293b',
-  text: '#f1f5f9', mute: '#94a3b8', emerald: '#10b981', amber: '#f59e0b', rose: '#f43f5e',
+  bg: '#020617', bgTop: '#0b0f19', card: '#0f172a', stroke: '#1e293b',
+  text: '#f8fafc', sub: '#cbd5e1', mute: '#94a3b8', faint: '#64748b', hairline: '#475569',
+  emerald: '#10b981', emeraldSoft: '#34d399', amber: '#f59e0b', amberSoft: '#fbbf24',
+  rose: '#f43f5e', roseSoft: '#fb7185', sky: '#38bdf8',
 };
 const FULL_BULAN = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
+const BULAN_TC = FULL_BULAN.map(s => s.charAt(0) + s.toLowerCase().slice(1)); // title case untuk sub-judul
 
 function rptRoundRect(ctx, x, y, w, h, r) {
   r = Math.max(0, Math.min(r, w / 2, h / 2));
@@ -714,6 +717,25 @@ function rptStatus(m) {
 // Lightweight measureText shim so the generator works in headless node too.
 const ctxMeasureText = (ctx, s) => ({ width: Math.ceil(s.length * 1.04) });
 
+// Ringkas nominal ke bentuk "148k" / "4.150k" untuk baris rincian sempit
+const kAbr = n => (Number(n || 0) >= 1000 ? (Number(n) / 1000).toLocaleString('id-ID') + 'k' : String(n || 0));
+
+// Auto-shrink font until `text` fits within `maxW`. Preserves font-family/weight.
+function shrinkToFit(ctx, text, maxW, baseFontSize) {
+  let fontSize = baseFontSize;
+  let font = ctx.font;
+  // Extract family+weight if present; otherwise build a safe default
+  const family = font.match(/system-ui[\s\S]*$/)?.[0] || 'system-ui, sans-serif';
+  const weightMatch = font.match(/\b(normal|bold|500|600|700)\b/);
+  const weight = weightMatch ? weightMatch[1] : 'normal';
+  ctx.font = `${weight} ${fontSize}px ${family}`;
+  while (fontSize > 14 && (ctx.measureText(text).width || ctxMeasureText(ctx, text).width) > maxW) {
+    fontSize -= 1;
+    ctx.font = `${weight} ${fontSize}px ${family}`;
+  }
+  return { fontSize, font: ctx.font };
+}
+
 // Auto-wrap long text to n lines at `maxW` (breaks on word boundaries); draws center-aligned.
 function drawWrapped(ctx, text, cx, topY, n, maxW, font, fillStyle) {
   ctx.save();
@@ -737,36 +759,63 @@ function drawWrapped(ctx, text, cx, topY, n, maxW, font, fillStyle) {
 function generateReportCanvas(d, canvas) {
   const ctx = canvas.getContext('2d');
   const C = RPT_C, W = 1080, H = 1920, PX = 48;
-  ctx.fillStyle = C.bg;
+
+  // --- Premium dark gradient background ---
+  const gradBg = ctx.createLinearGradient(0, 0, 0, H);
+  gradBg.addColorStop(0, '#0b0f19');
+  gradBg.addColorStop(1, '#020617');
+  ctx.fillStyle = gradBg;
   ctx.fillRect(0, 0, W, H);
 
+  // Subtle top hairline accent
+  ctx.strokeStyle = '#059669';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(PX, 1);
+  ctx.lineTo(W - PX, 1);
+  ctx.stroke();
+
   // --- 1. Header ---
-  ctx.fillStyle = '#064e3b';
-  rptRoundRect(ctx, PX, 56, W - PX * 2, 56, 12);
-  ctx.fill();
-  ctx.fillStyle = C.emerald;
-  ctx.font = '600 28px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('REGU 3 • LAPORAN OPERASIONAL KAS', W / 2, 92);
+  const badgeTxt = 'REGU 3 • LAPORAN KAS & OPERASIONAL';
+  ctx.font = '600 24px system-ui, sans-serif';
+  const bwid = ctx.measureText(badgeTxt).width || ctxMeasureText(ctx, badgeTxt).width;
+  const bPad = 28, bH = 44;
+  rptRoundRect(ctx, W / 2 - bwid / 2 - bPad, 52, bwid + bPad * 2, bH, bH / 2);
+  ctx.fillStyle = '#064e3b';
+  ctx.fill();
+  ctx.strokeStyle = '#059669';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  ctx.fillStyle = C.emeraldSoft;
+  ctx.fillText(badgeTxt, W / 2, 82);
 
   const mos = ACTIVE.length ? ACTIVE : [THIS_MONTH];
   const [yy, mm] = mos[0].split('-');
-  const periodTitle = mos.length === 1
-    ? 'REKAPITULASI BULAN ' + FULL_BULAN[Number(mm) - 1] + ' ' + yy
-    : 'REKAPITULASI PERIODE ' + mos.map(x => FULL_BULAN[Number(x.split('-')[1]) - 1]).join(' / ') + ' ' + yy;
-
-  // --- 1. Title (auto-wrap jika melebihi lebar aman ~120px padding tiap sisi) ---
-  ctx.textAlign = 'center';
-  const TITLE_MAX_W = W - 120, TITLE_BASE = 'bold 48px system-ui, sans-serif', TITLE_FALLBACK = 'bold 36px system-ui, sans-serif';
-  ctx.font = TITLE_BASE;
-  const tw = ctx.measureText(periodTitle).width || ctxMeasureText(ctx, periodTitle).width;
-  if (tw > TITLE_MAX_W) {
-    drawWrapped(ctx, periodTitle, W / 2, 152, 2, TITLE_MAX_W, TITLE_FALLBACK, C.text);
+  let periodSub;
+  if (mos.length === 1) {
+    periodSub = 'Bulan ' + BULAN_TC[Number(mm) - 1] + ' ' + yy;
   } else {
-    ctx.fillText(periodTitle, W / 2, 168);
+    const names = mos.map(x => BULAN_TC[Number(x.split('-')[1]) - 1]);
+    // berurutan dalam satu tahun -> rentang "Juli – September"; selain itu daftar
+    let contiguous = mos.every((x, i) => i === 0 || (Number(x.slice(0, 4)) === Number(mos[i-1].slice(0, 4)) && Number(x.slice(5)) === Number(mos[i-1].slice(5)) + 1));
+    periodSub = contiguous && mos.length > 2
+      ? 'Periode ' + names[0] + ' – ' + names[names.length - 1] + ' ' + yy
+      : 'Periode ' + names.join(', ') + ' ' + yy;
   }
-  ctx.fillStyle = C.mute;
-  ctx.font = '28px system-ui, sans-serif';
+
+  // Judul: baris 1 heading + baris 2 periode (title case), tracking rapat
+  ctx.textAlign = 'center';
+  try { ctx.letterSpacing = '-1px'; } catch (_) {}
+  ctx.fillStyle = C.text;
+  ctx.font = 'bold 44px system-ui, sans-serif';
+  ctx.fillText('REKAPITULASI IURAN KAS', W / 2, 152);
+  try { ctx.letterSpacing = '0px'; } catch (_) {}
+  ctx.fillStyle = C.sub;
+  ctx.font = '30px system-ui, sans-serif';
+  ctx.fillText(periodSub, W / 2, 192);
+  ctx.fillStyle = C.faint;
+  ctx.font = '22px system-ui, sans-serif';
   ctx.fillText('Dicetak ' + tglID(new Date().toISOString().slice(0, 10)), W / 2, 228);
   // --- 2. Kartu statistik utama ---
   const sibagiOn = !!(d.goal && d.goal.external_funds > 0);
@@ -779,29 +828,48 @@ function generateReportCanvas(d, canvas) {
     ? ((d.expenses || []).filter(e => mos.includes(String(e.expense_date || '').slice(0, 7))).reduce((s, e) => s + (e.amount || 0), 0))
     : d.total_expense;
   const stats = [
-    { label: sibagiOn ? 'TOTAL SALDO' : 'SALDO KAS', value: d.current_balance + sibagi, color: C.emerald, sub: sibagiOn ? 'Kas: ' + rp(d.current_balance) + ' • Sibagi: ' + rp(sibagi) : null },
-    { label: 'TOTAL MASUK', value: masuk + sibagi, color: C.amber, sub: sibagiOn ? 'Iuran: ' + rp(masuk) + ' • Sibagi: ' + rp(sibagi) : null },
-    { label: 'TOTAL KELUAR', value: keluar, color: C.rose },
+    { label: sibagiOn ? 'TOTAL SALDO' : 'SALDO KAS', value: d.current_balance + sibagi, color: C.emerald, sub: sibagiOn ? ['Kas Fisik: ' + rp(d.current_balance), 'Dana Sibagi: ' + rp(sibagi)] : null },
+    { label: 'TOTAL MASUK', value: masuk + sibagi, color: C.amber, sub: sibagiOn ? ['Iuran: ' + rp(masuk), 'Dana Sibagi: ' + rp(sibagi)] : null },
+    { label: 'TOTAL KELUAR', value: keluar, color: C.rose, sub: null },
   ];
   stats.forEach((s, i) => {
     const cx = PX + i * (cardW + gap);
     rptRoundRect(ctx, cx, cardY, cardW, cardH, 16);
-    ctx.fillStyle = C.card;
+    const gradCard = ctx.createLinearGradient(cx, cardY, cx, cardY + cardH);
+    gradCard.addColorStop(0, '#151e2e');
+    gradCard.addColorStop(1, '#0f172a');
+    ctx.fillStyle = gradCard;
     ctx.fill();
     ctx.strokeStyle = C.stroke;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1;
     ctx.stroke();
+    const padX = 20, maxW = cardW - 40;
     ctx.textAlign = 'left';
+    // label
     ctx.fillStyle = C.mute;
-    ctx.font = '26px system-ui, sans-serif';
-    ctx.fillText(s.label, cx + 20, cardY + 44);
+    ctx.font = '600 18px system-ui, sans-serif';
+    ctx.fillText(s.label.toUpperCase(), cx + padX, cardY + 42);
+    // nominal: auto-shrink to fit width
+    const nomTxt = rp(s.value);
+    let nomSize = 44;
+    let nomFont = `bold ${nomSize}px system-ui, sans-serif`;
+    ctx.font = nomFont;
+    let nw = ctx.measureText(nomTxt).width || ctxMeasureText(ctx, nomTxt).width;
+    while (nw > maxW && nomSize > 18) {
+      nomSize--;
+      ctx.font = `bold ${nomSize}px system-ui, sans-serif`;
+      nw = ctx.measureText(nomTxt).width || ctxMeasureText(ctx, nomTxt).width;
+    }
     ctx.fillStyle = s.color;
-    ctx.font = 'bold 56px system-ui, sans-serif';
-    ctx.fillText(rp(s.value), cx + 20, cardY + 130);
+    ctx.fillText(nomTxt, cx + padX, cardY + 126);
+    // sub — two lines when sibagi active
     if (s.sub) {
+      const baseY = cardY + 162;
+      const subFont = '18px system-ui, sans-serif';
+      ctx.font = subFont;
       ctx.fillStyle = C.mute;
-      ctx.font = '20px system-ui, sans-serif';
-      ctx.fillText(s.sub, cx + 20, cardY + 174);
+      ctx.fillText(s.sub[0], cx + padX, baseY);
+      ctx.fillText(s.sub[1], cx + padX, baseY + 24);
     }
   });
 
@@ -810,7 +878,10 @@ function generateReportCanvas(d, canvas) {
   if (d.goal) {
     const g = d.goal, gw = W - PX * 2;
     rptRoundRect(ctx, PX, y, gw, 220, 16);
-    ctx.fillStyle = C.card;
+    const gradGoal = ctx.createLinearGradient(PX, y, PX, y + 220);
+    gradGoal.addColorStop(0, '#151e2e');
+    gradGoal.addColorStop(1, '#0f172a');
+    ctx.fillStyle = gradGoal;
     ctx.fill();
     ctx.strokeStyle = C.stroke;
     ctx.lineWidth = 2;
@@ -853,16 +924,20 @@ function generateReportCanvas(d, canvas) {
     ctx.fill();
     if (pct > 0) {
       rptRoundRect(ctx, PX + 28, barY, Math.max(barH, barW * pct / 100), barH, barH / 2);
-      ctx.fillStyle = C.emerald;
+      const barGrad = ctx.createLinearGradient(PX + 28, 0, PX + 28 + Math.max(barH, barW * pct / 100), 0);
+      barGrad.addColorStop(0, C.emerald);
+      barGrad.addColorStop(1, C.sky);
+      ctx.fillStyle = barGrad;
       ctx.fill();
     }
     // --- Footer line: transparent funding breakdown when Sibagi active, plain remaining otherwise ---
-    ctx.font = '22px system-ui, sans-serif';
+    ctx.font = '19px system-ui, sans-serif';
     ctx.fillStyle = C.mute;
     if (hasExt) {
-      ctx.fillText('Kas: ' + rp((g.total_collected || 0) - g.external_funds) + '   |   Sibagi: ' + rp(g.external_funds) + '   |   Kurang: ' + rp(g.remaining), PX + 28, y + 168);
+      const kasVal = (g.total_collected || 0) - g.external_funds;
+      ctx.fillText('Kas: Rp ' + kAbr(kasVal) + '  •  Sibagi: Rp ' + kAbr(g.external_funds) + '  •  Kekurangan: Rp ' + kAbr(g.remaining), PX + 28, y + 168);
     } else {
-      ctx.fillText('Sisa Target: ' + rp(g.remaining), PX + 28, y + 168);
+      ctx.fillText('Sisa Target: Rp ' + rp(g.remaining), PX + 28, y + 168);
     }
     y += 230;
   }
@@ -884,7 +959,10 @@ function generateReportCanvas(d, canvas) {
     const cy = y + Math.floor(i / 2) * (cellH + cellGap);
     const st = rptStatus(m);
     rptRoundRect(ctx, cx, cy, cw, cellH, 12);
-    ctx.fillStyle = C.card;
+    const gradCell = ctx.createLinearGradient(cx, cy, cx, cy + cellH);
+    gradCell.addColorStop(0, '#151e2e');
+    gradCell.addColorStop(1, '#0f172a');
+    ctx.fillStyle = gradCell;
     ctx.fill();
     ctx.strokeStyle = st.color === C.emerald ? '#0f766e' : st.color === C.rose ? '#be123c' : st.color === C.amber ? '#92400e' : '#334155';
     ctx.lineWidth = 1.5;
@@ -909,12 +987,10 @@ function generateReportCanvas(d, canvas) {
   y += Math.ceil(actives.length / 2) * (cellH + cellGap);
 
   // --- 5. Footer ---
-  ctx.fillStyle = C.mute;
-  ctx.font = '26px system-ui, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('Dikelola transparan via Sistem Kas & Operasional Regu 3', W / 2, H - 88);
-  ctx.font = '22px system-ui, sans-serif';
-  ctx.fillText(location.hostname, W / 2, H - 52);
+  ctx.fillStyle = C.hairline;
+  ctx.font = '24px system-ui, sans-serif';
+  ctx.fillText('🔒 Sistema de Caixa & Operações Regu 3  •  cash.pisbgc.app', W / 2, H - 88);
 }
 
 // Wire up handlers
