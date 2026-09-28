@@ -809,31 +809,55 @@ function generateReportCanvas(d, canvas) {
     ctx.lineWidth = 2;
     ctx.stroke();
     const pct = Math.max(0, Math.min(100, g.percentage || 0));
+    const hasExt = (g.external_funds || 0) > 0;
+    // --- Header: title + optional Sibagi badge + percentage ---
     ctx.textAlign = 'left';
     ctx.fillStyle = C.amber;
     ctx.font = 'bold 30px system-ui, sans-serif';
-    ctx.fillText('🎯 ' + (g.title || 'Target Dana'), PX + 28, y + 54);
+    const titleStr = '🎯 ' + (g.title || 'Target Dana');
+    let titleX = PX + 28;
+    const titleW = ctx.measureText(titleStr).width;
+    ctx.fillText(titleStr, titleX, y + 42);
+    if (hasExt) {
+      const badgeTxt = '[Sibagi Active]';
+      ctx.font = 'bold 22px system-ui, sans-serif';
+      const badgeW = ctx.measureText(badgeTxt).width + 16;
+      rptRoundRect(ctx, titleX + titleW + 12, y + 22, badgeW, 28, 6);
+      ctx.fillStyle = '#064e3b';
+      ctx.fill();
+      ctx.fillStyle = C.emerald;
+      ctx.fillText(badgeTxt, titleX + titleW + 18, y + 42);
+    }
     ctx.textAlign = 'right';
     ctx.fillStyle = C.text;
     ctx.font = 'bold 40px system-ui, sans-serif';
-    ctx.fillText(Math.round(pct) + '%', PX + gw - 28, y + 58);
+    ctx.fillText(Math.round(pct) + '%', PX + gw - 28, y + 48);
+    // --- Sub-header: total collected vs target ---
     ctx.textAlign = 'left';
     ctx.fillStyle = C.mute;
     ctx.font = '26px system-ui, sans-serif';
-    ctx.fillText(rp(g.total_collected) + '  terkumpul dari target  ' + rp(g.target_amount), PX + 28, y + 104);
-    const barX = PX + 28, barY = y + 132, barW = gw - 56, barH = 30;
-    rptRoundRect(ctx, barX, barY, barW, barH, barH / 2);
+    ctx.fillText(rp(g.total_collected) + ' terkumpul dari target ' + rp(g.target_amount), PX + 28, y + 88);
+    // --- Progress bar ---
+    const barY = y + 112;
+    const barH = 26;
+    const barW = gw - 56;
+    rptRoundRect(ctx, PX + 28, barY, barW, barH, barH / 2);
     ctx.fillStyle = C.stroke;
     ctx.fill();
     if (pct > 0) {
-      rptRoundRect(ctx, barX, barY, Math.max(barH, barW * pct / 100), barH, barH / 2);
+      rptRoundRect(ctx, PX + 28, barY, Math.max(barH, barW * pct / 100), barH, barH / 2);
       ctx.fillStyle = C.emerald;
       ctx.fill();
     }
+    // --- Footer line: transparent funding breakdown when Sibagi active, plain remaining otherwise ---
+    ctx.font = '22px system-ui, sans-serif';
     ctx.fillStyle = C.mute;
-    ctx.font = '24px system-ui, sans-serif';
-    ctx.fillText('Sisa ' + rp(g.remaining), PX + 28, y + 198);
-    y += 260;
+    if (hasExt) {
+      ctx.fillText('Kas: ' + rp((g.total_collected || 0) - g.external_funds) + '   |   Sibagi: ' + rp(g.external_funds) + '   |   Kurang: ' + rp(g.remaining), PX + 28, y + 168);
+    } else {
+      ctx.fillText('Sisa Target: ' + rp(g.remaining), PX + 28, y + 168);
+    }
+    y += 230;
   }
 
   // --- 4. Matriks ringkas anggota (2 kolom) — hanya yang aktif; nonaktif/terhapus tidak ikut tampil ---
