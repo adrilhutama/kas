@@ -651,7 +651,7 @@ function rptRoundRect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-// Status badge for the report matrix: hijau Lunas / amber nominal kustom / merah belum
+// Status badge untuk matriks laporan: hijau Lunas / amber nominal kustom / merah belum / abu nonaktif
 function rptStatus(m) {
   const C = RPT_C;
   const mos = ACTIVE.length ? ACTIVE : [THIS_MONTH];
@@ -668,6 +668,29 @@ function rptStatus(m) {
   return pc === mos.length
     ? { label: 'LUNAS', color: C.emerald }
     : { label: pc + '/' + mos.length + ' LUNAS', color: C.amber };
+}
+
+// Lightweight measureText shim so the generator works in headless node too.
+const ctxMeasureText = (ctx, s) => ({ width: Math.ceil(s.length * 1.04) });
+
+// Auto-wrap long text to n lines at `maxW` (breaks on word boundaries); draws center-aligned.
+function drawWrapped(ctx, text, cx, topY, n, maxW, font, fillStyle) {
+  ctx.save();
+  ctx.font = font;
+  ctx.fillStyle = fillStyle;
+  ctx.textAlign = 'center';
+  const words = String(text).split(' ');
+  const rows = [''];
+  for (const w of words) {
+    const trial = rows[rows.length - 1] ? rows[rows.length - 1] + ' ' + w : w;
+    if (rows[rows.length - 1] && (ctx.measureText(trial).width || 0) > maxW) rows.push(w);
+    else rows[rows.length - 1] = trial;
+  }
+  if (rows.length > n) rows.length = n; // overflow beyond n lines is clipped
+  const lh = Math.ceil(parseFloat(font.split(/\d+(\.\d+)?px/)[1] || 40) * 1.35) || 56;
+  rows.forEach((row, j) => { if (row) ctx.fillText(row, cx, topY + j * lh); });
+  ctx.restore();
+  return rows.length;
 }
 
 function generateReportCanvas(d, canvas) {
@@ -690,15 +713,22 @@ function generateReportCanvas(d, canvas) {
   const periodTitle = mos.length === 1
     ? 'REKAPITULASI BULAN ' + FULL_BULAN[Number(mm) - 1] + ' ' + yy
     : 'REKAPITULASI PERIODE ' + mos.map(x => FULL_BULAN[Number(x.split('-')[1]) - 1]).join(' / ') + ' ' + yy;
-  ctx.fillStyle = C.text;
-  ctx.font = 'bold 48px system-ui, sans-serif';
-  ctx.fillText(periodTitle, W / 2, 168);
+
+  // --- 1. Title (auto-wrap jika melebihi lebar aman ~120px padding tiap sisi) ---
+  ctx.textAlign = 'center';
+  const TITLE_MAX_W = W - 120, TITLE_BASE = 'bold 48px system-ui, sans-serif', TITLE_FALLBACK = 'bold 36px system-ui, sans-serif';
+  ctx.font = TITLE_BASE;
+  const tw = ctx.measureText(periodTitle).width || ctxMeasureText(ctx, periodTitle).width;
+  if (tw > TITLE_MAX_W) {
+    drawWrapped(ctx, periodTitle, W / 2, 152, 2, TITLE_MAX_W, TITLE_FALLBACK, C.text);
+  } else {
+    ctx.fillText(periodTitle, W / 2, 168);
+  }
   ctx.fillStyle = C.mute;
   ctx.font = '28px system-ui, sans-serif';
-  ctx.fillText('Dicetak ' + tglID(new Date().toISOString().slice(0, 10)), W / 2, 212);
-
+  ctx.fillText('Dicetak ' + tglID(new Date().toISOString().slice(0, 10)), W / 2, 228);
   // --- 2. Kartu statistik utama ---
-  const cardY = 256, cardH = 180, gap = 20;
+  const cardY = 270, cardH = 180, gap = 20;
   const cardW = (W - PX * 2 - gap * 2) / 3;
   const pm = (d.per_month || []).filter(p => mos.includes(p.month));
   const masuk = pm.length ? pm.reduce((s, p) => s + (p.total || 0), 0) : d.total_income;
@@ -774,10 +804,13 @@ function generateReportCanvas(d, canvas) {
   const cellH = 76, cellGap = 12;
   const cellW = (W - PX * 2 - cellGap) / 2;
   (d.members || []).forEach((m, i) => {
-    const cx = PX + (i % 2) * (cellW + cellGap);
+    const total = (d.members || []).length;
+    const isLastAndOdd = (i === total - 1 && total % 2 === 1);
+    const cx = isLastAndOdd ? PX : PX + (i % 2) * (cellW + cellGap);
+    const cw = isLastAndOdd ? cellW * 2 + cellGap : cellW;
     const cy = y + Math.floor(i / 2) * (cellH + cellGap);
     const st = rptStatus(m);
-    rptRoundRect(ctx, cx, cy, cellW, cellH, 12);
+    rptRoundRect(ctx, cx, cy, cw, cellH, 12);
     ctx.fillStyle = C.card;
     ctx.fill();
     ctx.strokeStyle = st.color === C.emerald ? '#0f766e' : st.color === C.rose ? '#be123c' : st.color === C.amber ? '#92400e' : '#334155';
@@ -790,10 +823,10 @@ function generateReportCanvas(d, canvas) {
     ctx.fillStyle = C.mute;
     ctx.font = '22px system-ui, sans-serif';
     ctx.fillText(m.is_active === 0 ? 'nonaktif' : 'regu 3', cx + 18, cy + 62);
-    // badge status
+    // badge status — right-aligned within the card
     ctx.font = 'bold 24px system-ui, sans-serif';
     const bw = ctx.measureText(st.label).width + 36;
-    const bx = cx + cellW - bw - 14;
+    const bx = cx + cw - bw - 14;
     rptRoundRect(ctx, bx, cy + 14, bw, 48, 10);
     ctx.fillStyle = st.color === C.emerald ? '#064e3b' : st.color === C.rose ? '#4c0519' : st.color === C.amber ? '#451a03' : '#1e293b';
     ctx.fill();
