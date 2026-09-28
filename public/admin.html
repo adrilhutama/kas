@@ -769,7 +769,9 @@ function generateReportCanvas(d, canvas) {
   ctx.font = '28px system-ui, sans-serif';
   ctx.fillText('Dicetak ' + tglID(new Date().toISOString().slice(0, 10)), W / 2, 228);
   // --- 2. Kartu statistik utama ---
-  const cardY = 270, cardH = 180, gap = 20;
+  const sibagiOn = !!(d.goal && d.goal.external_funds > 0);
+  const sibagi = d.goal ? (d.goal.external_funds || 0) : 0;
+  const cardY = 270, cardH = sibagiOn ? 210 : 180, gap = 20;
   const cardW = (W - PX * 2 - gap * 2) / 3;
   const pm = (d.per_month || []).filter(p => mos.includes(p.month));
   const masuk = pm.length ? pm.reduce((s, p) => s + (p.total || 0), 0) : d.total_income;
@@ -777,8 +779,8 @@ function generateReportCanvas(d, canvas) {
     ? ((d.expenses || []).filter(e => mos.includes(String(e.expense_date || '').slice(0, 7))).reduce((s, e) => s + (e.amount || 0), 0))
     : d.total_expense;
   const stats = [
-    { label: 'SALDO KAS', value: d.current_balance, color: C.emerald },
-    { label: 'TOTAL MASUK', value: masuk, color: C.amber },
+    { label: sibagiOn ? 'TOTAL SALDO' : 'SALDO KAS', value: d.current_balance + sibagi, color: C.emerald, sub: sibagiOn ? 'Kas: ' + rp(d.current_balance) + ' • Sibagi: ' + rp(sibagi) : null },
+    { label: 'TOTAL MASUK', value: masuk + sibagi, color: C.amber, sub: sibagiOn ? 'Iuran: ' + rp(masuk) + ' • Sibagi: ' + rp(sibagi) : null },
     { label: 'TOTAL KELUAR', value: keluar, color: C.rose },
   ];
   stats.forEach((s, i) => {
@@ -796,6 +798,11 @@ function generateReportCanvas(d, canvas) {
     ctx.fillStyle = s.color;
     ctx.font = 'bold 56px system-ui, sans-serif';
     ctx.fillText(rp(s.value), cx + 20, cardY + 130);
+    if (s.sub) {
+      ctx.fillStyle = C.mute;
+      ctx.font = '20px system-ui, sans-serif';
+      ctx.fillText(s.sub, cx + 20, cardY + 174);
+    }
   });
 
   // --- 3. Target / Goal (jika aktif) ---

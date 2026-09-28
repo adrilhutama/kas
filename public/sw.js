@@ -2,7 +2,7 @@
  * Caches the app shell (HTML/manifest/icons) for installable offline-capable PWA.
  * NEVER caches /api/* — financial data is always network-fresh.
  */
-const CACHE = 'kas-regu-3-v4';
+const CACHE = 'kas-regu-3-v5';
 const SHELL = [
   '/',
   '/index.html',
