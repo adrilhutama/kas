@@ -27,6 +27,8 @@
   table.matrix tbody tr:nth-child(even) td:first-child { background-color: rgb(30 41 59); }
   table.matrix tbody tr:nth-child(odd) td:first-child { background-color: rgb(15 23 42); }
   table.matrix tbody td:first-child { box-shadow: 4px 0 6px -4px rgb(0 0 0 / .6); }
+  /* hairline so the frozen name column reads as an independent track when scrolling */
+  table.matrix th:first-child, table.matrix td:first-child { border-right: 1px solid rgb(30 41 59); }
   /* hairline dividers between rows */
   table.matrix tbody tr + tr { border-top: 1px solid rgb(30 41 59 / .5); }
   /* row hover for readability across wide rows */
@@ -51,7 +53,7 @@
 
 <!-- Top bar -->
 <header class="sticky top-0 z-40 bg-[#090d16]/80 backdrop-blur-md border-b border-slate-800/70">
-  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 min-h-14 py-3 flex items-center justify-between gap-3">
     <a href="/" class="flex items-center gap-2.5 group">
       <span class="grid place-items-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white font-black text-xs tracking-tight shadow-lg shadow-emerald-900/50 group-hover:shadow-emerald-800/60 transition-shadow">K3</span>
       <span class="leading-tight">
@@ -89,13 +91,13 @@
   <!-- Dashboard -->
   <div id="dash" class="hidden space-y-5">
     <!-- Admin control bar: balance + quick actions -->
-    <div class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 shadow-lg shadow-black/30">
-      <div class="flex items-baseline gap-2.5 text-sm">
+    <div class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur px-4 sm:px-5 py-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 shadow-lg shadow-black/30">
+      <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1 text-sm">
         <span class="text-slate-400 text-xs uppercase tracking-wide font-semibold">Saldo Kas</span>
         <span id="stBalance" class="font-black tabular-nums text-amber-300 text-base sm:text-lg">-</span>
         <span class="text-xs text-slate-500 tabular-nums">(↗ <span id="stIncome" class="text-emerald-400"></span> · ↘ <span id="stExpense" class="text-rose-400"></span>)</span>
       </div>
-      <div class="flex flex-wrap gap-1.5">
+      <div class="flex flex-wrap gap-1.5 w-full sm:w-auto">
         <button id="btnGenImage" class="text-xs font-semibold px-3.5 py-2 rounded-full border border-amber-600/50 bg-amber-700/20 text-amber-300 hover:bg-amber-700/40 active:scale-95 transition-all">📸 <span class="hidden sm:inline">Buat Gambar Laporan</span></button>
         <button id="btnWA" class="text-xs px-3.5 py-2 rounded-full border border-emerald-700/60 bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/60 active:scale-95 transition-all">📋 <span class="hidden sm:inline">Salin Rekap WA</span></button>
         <button id="btnLogout" class="text-xs px-3.5 py-2 rounded-full border border-slate-700/70 bg-slate-800/60 text-slate-400 hover:text-slate-200 active:scale-95 transition-all">Keluar</button>
@@ -167,7 +169,7 @@
               title="Bulan wajib iuran mulai" />
             <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all shrink-0">+ Tambah</button>
           </form>
-          <div id="memList" class="flex flex-wrap gap-1.5"></div>
+          <div id="memList" class="grid grid-cols-2 sm:grid-cols-3 gap-2">
         </section>
       </div>
     </div>
@@ -187,8 +189,8 @@
         <button id="pillAll" class="px-3 py-1.5 rounded-full text-xs font-medium border bg-slate-800 border-slate-700 text-slate-400 transition-all">Semua Anggota (<span id="pillAllN">0</span>)</button>
         <button id="pillUnpaid" class="px-3 py-1.5 rounded-full text-xs font-medium border bg-slate-800 border-slate-700 text-slate-400 transition-all">🔴 Belum Lunas Bulan Ini (<span id="pillUnpaidN">0</span>)</button>
       </div>
-      <div class="scroll-x rounded-xl border border-slate-800/70 overflow-hidden">
-        <table class="matrix w-full text-sm whitespace-nowrap">
+      <div class="scroll-x w-full overflow-x-auto rounded-xl border border-slate-800/70">
+        <table class="matrix w-full min-w-[500px] text-sm whitespace-nowrap">
           <thead><tr id="mHead" class="bg-slate-800/90 text-slate-300 text-xs"></tr></thead>
           <tbody id="mBody"></tbody>
         </table>
@@ -523,9 +525,11 @@ function render() {
   const ml = document.getElementById('memList');
   ml.innerHTML = '';
   d.members.forEach(m => {
+    const cell = document.createElement('div');
+    cell.className = 'flex items-stretch gap-1.5';
     const b = document.createElement('button');
-    b.className = 'px-2.5 py-1 rounded-full text-xs border ' +
-      (m.is_active ? 'bg-slate-800 border-slate-600 text-slate-200' : 'bg-slate-900 border-slate-800 text-slate-500 line-through');
+    b.className = 'flex-1 min-w-0 px-3 py-2 rounded-xl text-xs font-medium text-left border ' +
+      (m.is_active ? 'bg-slate-800/70 border-slate-600 text-slate-200' : 'bg-slate-950/60 border-slate-800 text-slate-500 line-through opacity-70');
     b.textContent = (m.is_active ? '✓ ' : '') + m.name;
     b.title = m.is_active
       ? `Mulai wajib: ${namaBulan(m.start_month || '2026-07')}\nKetuk untuk nonaktifkan`
@@ -539,13 +543,14 @@ function render() {
       if (r.status === 401) return logout();
       load();
     };
-    ml.appendChild(b);
+    cell.appendChild(b);
 
     // Delete button (trash icon) — always visible for all members
     const delBtn = document.createElement('button');
     delBtn.textContent = '🗑️';
     delBtn.title = 'Hapus permanen [' + m.name + '] (semua data iuran ikut terhapus)';
-    delBtn.className = 'px-1.5 py-1 rounded-full text-xs border border-rose-700/40 bg-rose-950/30 text-rose-400 hover:bg-rose-900/60 hover:text-rose-200 ml-1';
+    delBtn.setAttribute('aria-label', 'Hapus permanen ' + m.name);
+    delBtn.className = 'w-8 shrink-0 grid place-items-center rounded-xl text-sm border border-rose-700/40 bg-rose-950/30 text-rose-400 hover:bg-rose-900/60 hover:text-rose-200 transition-colors';
     delBtn.onclick = async (ev) => {
       ev.stopPropagation();
       if (!confirm('Yakin ingin menghapus permanen ' + m.name + '?\nSemua data iuran terkait anggota ini akan ikut terhapus.')) return;
@@ -556,7 +561,8 @@ function render() {
       if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menghapus.'); }
       load();
     };
-    ml.appendChild(delBtn);
+    cell.appendChild(delBtn);
+    ml.appendChild(cell);
   });
 }
 

@@ -27,6 +27,8 @@
   table.matrix tbody tr:nth-child(even) td:first-child { background-color: rgb(30 41 59); }
   table.matrix tbody tr:nth-child(odd) td:first-child { background-color: rgb(15 23 42); }
   table.matrix tbody td:first-child { box-shadow: 4px 0 6px -4px rgb(0 0 0 / .6); }
+  /* hairline so the frozen name column reads as an independent track when scrolling */
+  table.matrix th:first-child, table.matrix td:first-child { border-right: 1px solid rgb(30 41 59); }
   /* hairline dividers between rows */
   table.matrix tbody tr + tr { border-top: 1px solid rgb(30 41 59 / .5); }
   /* row hover for readability across wide rows */
@@ -46,11 +48,6 @@
     transition: transform .12s ease, border-color .15s ease, background-color .15s ease, color .15s ease;
   }
   #chips > button:active, #pillAll:active, #pillUnpaid:active { transform: scale(.95); }
-  /* stat-card value auto-shrink keeps cards compact on narrow screens */
-  @media (min-width: 640px) {
-    #stIncome, #stExpense { font-size: 1rem; }
-    #stBalance { font-size: 1.25rem; }
-  }
 </style>
 </head>
 <body class="text-slate-100 min-h-screen antialiased">
@@ -85,15 +82,15 @@
     <section class="grid grid-cols-3 gap-2 sm:gap-3">
       <div class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-3 sm:p-4 shadow-lg shadow-black/30 transition-transform hover:-translate-y-px">
         <div class="flex items-center gap-1.5 text-[11px] text-slate-400 uppercase tracking-wide"><span class="text-emerald-400">↗</span> Masuk</div>
-        <div id="stIncome" class="mt-1 font-semibold tabular-nums text-emerald-300 text-base truncate" title="Total pemasukan seluruh periode">-</div>
+        <div id="stIncome" class="mt-1 font-bold tabular-nums text-emerald-300 text-base sm:text-xl truncate" title="Total pemasukan seluruh periode">-</div>
       </div>
       <div class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-3 sm:p-4 shadow-lg shadow-black/30 transition-transform hover:-translate-y-px">
         <div class="flex items-center gap-1.5 text-[11px] text-slate-400 uppercase tracking-wide"><span class="text-rose-400">↘</span> Keluar</div>
-        <div id="stExpense" class="mt-1 font-semibold tabular-nums text-rose-300 text-base truncate" title="Total pengeluaran seluruh periode">-</div>
+        <div id="stExpense" class="mt-1 font-bold tabular-nums text-rose-300 text-base sm:text-xl truncate" title="Total pengeluaran seluruh periode">-</div>
       </div>
       <div class="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-slate-900 to-slate-950/90 backdrop-blur p-3 sm:p-4 shadow-lg shadow-amber-950/40 transition-transform hover:-translate-y-px">
         <div class="flex items-center gap-1.5 text-[11px] text-amber-300/80 uppercase tracking-wide"><span>◉</span> Saldo</div>
-        <div id="stBalance" class="mt-1 font-extrabold tabular-nums text-amber-300 text-base truncate" title="Saldo kas saat ini">-</div>
+        <div id="stBalance" class="mt-1 font-black tabular-nums text-amber-300 text-base sm:text-xl truncate" title="Saldo kas saat ini">-</div>
       </div>
     </section>
 
@@ -151,8 +148,8 @@
           <button id="pillUnpaid" aria-label="Tampilkan anggota belum lunas bulan ini" class="px-3 py-1.5 rounded-full text-xs font-medium border bg-slate-800 border-slate-700 text-slate-400">🔴 Belum Lunas Bulan Ini (<span id="pillUnpaidN">0</span>)</button>
         </div>
       </div>
-      <div class="scroll-x rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur shadow-lg shadow-black/30">
-        <table class="matrix w-full text-sm whitespace-nowrap">
+      <div class="scroll-x w-full overflow-x-auto rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur shadow-lg shadow-black/30">
+        <table class="matrix w-full min-w-[500px] text-sm whitespace-nowrap">
           <thead>
             <tr id="mHead" class="bg-slate-800/90 text-slate-300 text-xs"></tr>
           </thead>
