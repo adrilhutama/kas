@@ -175,6 +175,13 @@
           <button id="btnDownloadImg" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded-xl">📥 Unduh PNG</button>
           <button id="btnCopyImg" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold py-2 rounded-xl">📋 Salin Gambar</button>
         </div>
+        <div class="mb-1 px-1">
+          <label class="block text-xs font-semibold text-slate-400 mb-1">💬 Motto / Catatan Footer:</label>
+          <div class="flex gap-2">
+            <input type="text" id="reportMottoInput" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500" placeholder="Satu Rasa, Satu Jiwa, Solid Regu 3!">
+            <button type="button" id="btnRerenderMotto" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition" title="Acak motto">🎲</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -680,6 +687,29 @@ const RPT_C = {
   rose: '#f43f5e', roseSoft: '#fb7185', sky: '#38bdf8',
 };
 const FULL_BULAN = ['JANUARI','FEBRUARI','MARET','APRIL','MEI','JUNI','JULI','AGUSTUS','SEPTEMBER','OKTOBER','NOVEMBER','DESEMBER'];
+const BULAN_SLN = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+
+// Anggota catatan dinamis anti-template
+function rptNote(m) {
+  const C = RPT_C, st = rptStatus(m);
+  if (m.is_active === 0) return 'nonaktif';
+  const fee = (DATA && DATA.month_fee) || 10000;
+  // Belum lunas -> bulan menunggak
+  if (st.label === 'BELUM') {
+    const unpaid = (ACTIVE.length ? ACTIVE : [THIS_MONTH]).filter(mo => !m.paid[mo] && mo >= (m.start_month || '2026-07'));
+    return unpaid.length ? 'Menunggak: ' + BULAN_SLN[Number(unpaid[0].split('-')[1]) - 1] : 'Belum lunas';
+  }
+  // LUNAS + nominal kustom -> tunjukkan jumlah
+  if (st.label.startsWith('RP ')) {
+    const mos = ACTIVE.length ? ACTIVE : [THIS_MONTH];
+    const total = mos.reduce((s, mo) => s + (m.amounts[mo] || 0), 0);
+    return 'Setoran: ' + (total >= 1000 ? (total / 1000).toLocaleString('id-ID') + 'k' : rp(total));
+  }
+  // LUNAS semua -> info periode terakhir
+  const paidMos = (ACTIVE.length ? ACTIVE : [THIS_MONTH]).filter(mo => m.paid[mo]);
+  const last = paidMos.length ? paidMos[paidMos.length - 1] : THIS_MONTH;
+  return 'Lunas s.d. ' + BULAN_SLN[Number(last.split('-')[1]) - 1];
+}
 const BULAN_TC = FULL_BULAN.map(s => s.charAt(0) + s.toLowerCase().slice(1)); // title case untuk sub-judul
 
 function rptRoundRect(ctx, x, y, w, h, r) {
@@ -755,6 +785,14 @@ function drawWrapped(ctx, text, cx, topY, n, maxW, font, fillStyle) {
   ctx.restore();
   return rows.length;
 }
+
+const MOTTOS = [
+  "Satu Rasa, Satu Jiwa, Tetap Solid Regu 3!",
+  "Transparansi Menjaga Kepercayaan, Kekompakan Menjaga Barisan.",
+  "Jaga Kehormatan, Pererat Persaudaraan Regu 3.",
+  "Disiplin, Sigap, dan Loyalitas Tanpa Batas.",
+  "Dari Kita, Oleh Kita, Untuk Kebersamaan Regu 3.",
+];
 
 function generateReportCanvas(d, canvas) {
   const ctx = canvas.getContext('2d');
@@ -973,7 +1011,7 @@ function generateReportCanvas(d, canvas) {
     ctx.fillText(String(m.name).toUpperCase(), cx + 18, cy + 34);
     ctx.fillStyle = C.mute;
     ctx.font = '22px system-ui, sans-serif';
-    ctx.fillText(m.is_active === 0 ? 'nonaktif' : 'regu 3', cx + 18, cy + 62);
+    ctx.fillText(rptNote(m), cx + 18, cy + 62);
     // badge status — right-aligned within the card
     ctx.font = 'bold 24px system-ui, sans-serif';
     const bw = ctx.measureText(st.label).width + 36;
@@ -988,9 +1026,13 @@ function generateReportCanvas(d, canvas) {
 
   // --- 5. Footer ---
   ctx.textAlign = 'center';
+  const motto = document.getElementById('reportMottoInput')?.value?.trim() || MOTTOS[0];
+  ctx.fillStyle = '#cbd5e1'; // slate-300
+  ctx.font = 'italic 20px system-ui, sans-serif';
+  ctx.fillText('"' + motto + '"', W / 2, H - 120);
   ctx.fillStyle = C.hairline;
-  ctx.font = '24px system-ui, sans-serif';
-  ctx.fillText('🔒 Sistema de Caixa & Operações Regu 3  •  cash.pisbgc.app', W / 2, H - 88);
+  ctx.font = '18px system-ui, sans-serif';
+  ctx.fillText('🔒 Sistem Kas & Operasional Regu 3  •  cash.pisbgc.app', W / 2, H - 88);
 }
 
 // Wire up handlers
@@ -1005,6 +1047,23 @@ document.getElementById('btnGenImage').onclick = () => {
 };
 document.getElementById('btnCloseImage').onclick = () => document.getElementById('imageModal').classList.add('hidden');
 document.getElementById('imageModal').onclick = e => { if (e.target.id === 'imageModal') document.getElementById('imageModal').classList.add('hidden'); };
+document.getElementById('btnRerenderMotto').onclick = () => {
+  const inp = document.getElementById('reportMottoInput');
+  if (!inp) return;
+  inp.value = MOTTOS[Math.floor(Math.random() * MOTTOS.length)];
+  inp.dispatchEvent(new Event('input'));
+};
+let _mottoTimer = null;
+const _mottoEl = document.getElementById('reportMottoInput');
+if (_mottoEl) {
+  _mottoEl.addEventListener('input', () => {
+    clearTimeout(_mottoTimer);
+    _mottoTimer = setTimeout(() => {
+      const pc = document.getElementById('reportCanvas');
+      if (pc.width) generateReportCanvas(DATA, pc);
+    }, 400);
+  });
+}
 document.getElementById('btnDownloadImg').onclick = () => {
   const pc = document.getElementById('reportCanvas');
   if (!pc.width) return;
