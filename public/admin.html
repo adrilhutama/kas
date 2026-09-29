@@ -6,12 +6,18 @@
 <title>KAS REGU 3 — Admin</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <link rel="manifest" href="/manifest.json" />
-<meta name="theme-color" content="#0f172a" />
+<meta name="theme-color" content="#090d16" />
 <link rel="icon" type="image/svg+xml" href="/icon.svg" />
 <link rel="apple-touch-icon" href="/icons/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <style>
+  html { background: #090d16; }
+  body { -webkit-tap-highlight-color: transparent; background: #090d16; }
+  * { scrollbar-width: thin; scrollbar-color: rgb(51 65 81) transparent; }
+  *::-webkit-scrollbar { width: 8px; height: 8px; }
+  *::-webkit-scrollbar-thumb { background: rgb(51 65 81 / .7); border-radius: 8px; }
+  *::-webkit-scrollbar-track { background: transparent; }
   .scroll-x { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   table.matrix th:first-child, table.matrix td:first-child {
     position: sticky; left: 0; z-index: 2;
@@ -28,184 +34,230 @@
   table.matrix tbody tr:hover td:first-child { background-color: rgb(51 65 85); }
   .tgl { cursor: pointer; user-select: none; }
   .tgl:active { transform: scale(.9); }
+  /* tappable controls: subtle press-scale micro-interaction */
+  #chips > button, #pillAll, #pillUnpaid, .payChip, #memList > button {
+    transition: transform .12s ease, border-color .15s ease, background-color .15s ease, color .15s ease;
+  }
+  #chips > button:active, #pillAll:active, #pillUnpaid:active, .payChip:active { transform: scale(.93); }
+  /* focus rings */
+  input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible {
+    outline: 2px solid rgb(16 185 129 / .5); outline-offset: 1px;
+  }
 </style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-<!-- subtle top glow -->
-<div class="pointer-events-none absolute inset-x-0 top-0 h-56 bg-gradient-to-b from-emerald-950/50 via-slate-950/20 to-transparent"></div>
-<div class="relative max-w-3xl mx-auto px-4 pb-16">
+<body class="text-slate-100 min-h-screen antialiased">
+<!-- ambient glow -->
+<div class="pointer-events-none fixed inset-x-0 top-0 h-72 bg-gradient-to-b from-emerald-950/40 via-slate-950/30 to-transparent"></div>
 
-  <header class="pt-6 pb-5 flex items-start justify-between gap-3">
-    <div>
-      <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold tracking-widest uppercase bg-slate-800/80 border border-slate-700/70 text-slate-400">Regu 3 &bull; Admin Panel</span>
-      <h1 class="mt-2 text-2xl font-extrabold tracking-tight">🔐 Kelola Kas</h1>
-    </div>
-    <div class="shrink-0 mt-1 flex flex-col items-end gap-1.5">
-      <a href="/" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-slate-700/70 bg-slate-900/60 text-slate-400 hover:text-emerald-300 hover:border-emerald-700/60">← Publik</a>
-      <a href="/spin.html" title="Roda Backup Libur" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full text-[11px] border border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20">🎡 Roda Backup</a>
-    </div>
-  </header>
+<!-- Top bar -->
+<header class="sticky top-0 z-40 bg-[#090d16]/80 backdrop-blur-md border-b border-slate-800/70">
+  <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+    <a href="/" class="flex items-center gap-2.5 group">
+      <span class="grid place-items-center w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-700 text-white font-black text-xs tracking-tight shadow-lg shadow-emerald-900/50 group-hover:shadow-emerald-800/60 transition-shadow">K3</span>
+      <span class="leading-tight">
+        <span class="block text-sm font-extrabold tracking-tight">Kas Regu 3</span>
+        <span class="block text-[10px] uppercase tracking-[.18em] text-amber-400/90 font-semibold">Admin Panel</span>
+      </span>
+    </a>
+    <nav class="flex flex-wrap items-center justify-end gap-1.5" id="topNav">
+      <a href="/spin.html" title="Roda Backup Libur" class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-medium border border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 active:scale-95 transition-all">🎡 <span class="hidden sm:inline">Roda Backup</span></a>
+      <a href="/" title="Halaman publik" class="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700/70 bg-slate-900/70 text-slate-300 hover:text-emerald-300 hover:border-emerald-700/60 active:scale-95 transition-all">← <span class="hidden sm:inline">Publik</span></a>
+    </nav>
+  </div>
+</header>
+
+<div class="relative max-w-6xl mx-auto px-4 sm:px-6 py-6 pb-16">
 
   <!-- Login barrier -->
-  <div id="login" class="max-w-sm mx-auto rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-5">
-    <h2 class="font-semibold mb-3">Masuk sebagai admin</h2>
-    <input id="pw" type="password" placeholder="Password admin" autocomplete="current-password"
-      class="w-full bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 mb-3 text-sm outline-none focus:border-emerald-500" />
-    <button id="btnLogin" class="w-full bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 font-semibold">Masuk</button>
-    <p id="loginErr" class="hidden text-rose-400 text-sm mt-2"></p>
+  <div id="login" class="max-w-sm mx-auto my-10 sm:my-16 rounded-3xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-6 sm:p-8 shadow-2xl shadow-black/50">
+    <div class="mx-auto w-12 h-12 grid place-items-center rounded-2xl bg-gradient-to-br from-emerald-500/25 to-emerald-700/25 border border-emerald-500/40 mb-4">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <h2 class="text-lg font-black tracking-tight text-center">Masuk sebagai admin</h2>
+    <p class="text-xs text-slate-500 text-center mt-1 mb-5">Area terbatas — ketik kata sandi tim untuk mengelola kas.</p>
+    <label for="pw" class="sr-only">Password admin</label>
+    <input id="pw" type="password" placeholder="••••••••" autocomplete="current-password"
+      class="w-full bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-3 mb-3 text-sm outline-none focus:border-emerald-500 transition-colors placeholder:text-slate-600" />
+    <button id="btnLogin" class="w-full bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 active:scale-[.98] disabled:opacity-40 disabled:cursor-not-allowed rounded-xl py-3 text-sm font-bold transition-all">Masuk</button>
+    <p class="text-[10px] text-slate-600 text-center mt-2">Tekan Enter untuk masuk</p>
+    <p id="loginErr" class="hidden text-rose-400 text-sm mt-2 text-center"></p>
+    <div class="text-center mt-5 pt-4 border-t border-slate-800/70">
+      <a href="/" class="text-[11px] text-slate-500 hover:text-emerald-400 transition-colors">← Kembali ke halaman publik</a>
+    </div>
   </div>
 
   <!-- Dashboard -->
-  <div id="dash" class="hidden">
+  <div id="dash" class="hidden space-y-5">
     <!-- Admin control bar: balance + quick actions -->
-    <div class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm px-4 py-3 mb-4 flex flex-wrap items-center justify-between gap-2">
-      <div class="text-sm text-slate-400">Saldo: <span id="stBalance" class="font-extrabold tabular-nums text-amber-300">-</span>
-        <span class="text-xs">(<span id="stIncome" class="text-emerald-400 tabular-nums"></span> / <span id="stExpense" class="text-rose-400 tabular-nums"></span>)</span>
+    <div class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur px-4 sm:px-5 py-3.5 flex flex-wrap items-center justify-between gap-3 shadow-lg shadow-black/30">
+      <div class="flex items-baseline gap-2.5 text-sm">
+        <span class="text-slate-400 text-xs uppercase tracking-wide font-semibold">Saldo Kas</span>
+        <span id="stBalance" class="font-black tabular-nums text-amber-300 text-base sm:text-lg">-</span>
+        <span class="text-xs text-slate-500 tabular-nums">(↗ <span id="stIncome" class="text-emerald-400"></span> · ↘ <span id="stExpense" class="text-rose-400"></span>)</span>
       </div>
-      <div class="flex gap-1.5">
-        <button id="btnWA" class="text-xs px-3 py-1.5 rounded-full border border-emerald-700/60 bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/60">📋 Salin Rekap WA</button>
-        <button id="btnGenImage" class="text-xs font-semibold px-3 py-1.5 rounded-full border border-amber-600/50 bg-amber-700/20 text-amber-300 hover:bg-amber-700/40">📸 Buat Gambar Laporan</button>
-        <button id="btnLogout" class="text-xs px-3 py-1.5 rounded-full border border-slate-700/70 bg-slate-800/60 text-slate-400 hover:text-slate-200">Keluar</button>
+      <div class="flex flex-wrap gap-1.5">
+        <button id="btnGenImage" class="text-xs font-semibold px-3.5 py-2 rounded-full border border-amber-600/50 bg-amber-700/20 text-amber-300 hover:bg-amber-700/40 active:scale-95 transition-all">📸 <span class="hidden sm:inline">Buat Gambar Laporan</span></button>
+        <button id="btnWA" class="text-xs px-3.5 py-2 rounded-full border border-emerald-700/60 bg-emerald-950/50 text-emerald-300 hover:bg-emerald-900/60 active:scale-95 transition-all">📋 <span class="hidden sm:inline">Salin Rekap WA</span></button>
+        <button id="btnLogout" class="text-xs px-3.5 py-2 rounded-full border border-slate-700/70 bg-slate-800/60 text-slate-400 hover:text-slate-200 active:scale-95 transition-all">Keluar</button>
       </div>
     </div>
-    <div id="err" class="hidden mb-3 p-3 rounded-2xl bg-rose-950/60 border border-rose-800/60 text-rose-200 text-sm"></div>
+    <div id="err" class="hidden p-3.5 rounded-2xl bg-rose-950/60 border border-rose-800/60 text-rose-200 text-sm"></div>
 
-    <!-- 1. Kelola Iuran Anggota -->
-    <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
-      <h2 class="font-semibold mb-3 text-sm border-l-2 border-emerald-500 pl-2.5">📋 Kelola Iuran Anggota <span class="text-slate-500 font-normal">(ketuk badge untuk ubah)</span></h2>
+    <!-- Two-column grid: left = forms (expense + goal), right = expense list + members -->
+    <div class="grid gap-5 lg:grid-cols-2 lg:items-start">
+
+      <!-- LEFT COLUMN -->
+      <div class="space-y-5">
+        <!-- 3. Pencatatan Pengeluaran Kas -->
+        <section class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-4 sm:p-5 shadow-lg shadow-black/30">
+          <h2 class="font-bold text-sm tracking-tight mb-3 flex items-center gap-2 border-l-2 border-rose-500 pl-3">🧾 Pencatatan Pengeluaran Kas</h2>
+          <form id="fExp" class="grid gap-2.5 mb-4">
+            <input id="expDesc" placeholder="Deskripsi (cth: Beli konsumsi rapat)" required
+              class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors" />
+            <div class="grid grid-cols-2 gap-2">
+              <input id="expAmt" type="number" min="1" step="1" placeholder="Nominal (Rp)" required
+                class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors" />
+              <input id="expDate" type="date" required
+                class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-slate-400 mb-1.5">📎 Foto Bukti / Nota <span class="text-slate-600 font-normal">(Opsional)</span></label>
+              <label for="expReceiptFile" class="flex items-center justify-center gap-2 border-2 border-dashed border-slate-700/70 hover:border-emerald-600/60 bg-slate-950/40 rounded-xl px-4 py-4 text-xs text-slate-500 cursor-pointer transition-colors has-file:border-emerald-600/60 has-file:text-emerald-300">
+                <span class="text-lg" aria-hidden="true">🖼️</span>
+                <span>Pilih Foto Struk (JPEG/PNG/WebP, maks 5 MB)</span>
+              </label>
+              <input type="file" id="expReceiptFile" accept="image/jpeg,image/png,image/webp" class="sr-only" />
+              <p id="expReceiptInfo" class="text-[10px] text-slate-500 mt-1 hidden"></p>
+            </div>
+            <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 active:scale-[.98] rounded-xl py-3 text-sm font-bold transition-all">+ Tambah pengeluaran</button>
+          </form>
+          <h3 class="text-[11px] uppercase tracking-wide text-slate-500 font-semibold mb-2">Daftar Pengeluaran Aktif</h3>
+          <div id="expList" class="space-y-2"></div>
+        </section>
+
+        <!-- 2. Target Dana & Donasi Sibagi -->
+        <section class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-4 sm:p-5 shadow-lg shadow-black/30">
+          <h2 class="font-bold text-sm tracking-tight mb-3 flex items-center gap-2 border-l-2 border-amber-500 pl-3">🎯 Target Dana &amp; Donasi Sibagi</h2>
+          <form id="fGoal" class="grid gap-2.5">
+            <input id="goalTitleIn" placeholder="Nama/Judul Target (cth: Acara Makan Regu)" required
+              class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors" />
+            <input id="goalTargetIn" type="number" min="1" step="1" placeholder="Target Nominal (Rp)" required
+              class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors" />
+            <input id="goalUrlIn" type="url" placeholder="URL Sibagi (cth: https://sibagi.com/nama_akun)"
+              class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors" />
+            <input id="goalExtIn" type="number" min="0" step="1" placeholder="Total Donasi Sibagi / Dana Luar (Rp)"
+              class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors" />
+            <button type="submit" class="bg-amber-500 hover:bg-amber-400 text-slate-900 active:scale-[.98] rounded-xl py-3 text-sm font-bold transition-all">💾 Simpan Target &amp; Sibagi</button>
+            <p id="goalMsg" class="hidden text-xs text-center"></p>
+          </form>
+        </section>
+      </div>
+
+      <!-- RIGHT COLUMN -->
+      <div class="space-y-5">
+        <!-- 4. Daftar & Tambah Anggota -->
+        <section class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-4 sm:p-5 shadow-lg shadow-black/30">
+          <h2 class="font-bold text-sm tracking-tight mb-3 flex items-center gap-2 border-l-2 border-sky-500 pl-3">👥 Tambah Anggota</h2>
+          <form id="fMem" class="flex flex-col sm:flex-row gap-2 mb-4">
+            <input id="memName" placeholder="Nama anggota baru" required
+              class="flex-1 bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500 transition-colors" />
+            <label class="sr-only" for="memStartMonth">Bulan wajib iuran mulai</label>
+            <input id="memStartMonth" type="month" value="" min="2026-07"
+              class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3 py-2.5 text-sm text-slate-300 outline-none focus:border-emerald-500 transition-colors sm:w-[170px]"
+              title="Bulan wajib iuran mulai" />
+            <button type="submit" class="bg-emerald-600 hover:bg-emerald-500 active:scale-95 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all shrink-0">+ Tambah</button>
+          </form>
+          <div id="memList" class="flex flex-wrap gap-1.5"></div>
+        </section>
+      </div>
+    </div>
+
+    <!-- FULL WIDTH: 1. Matriks Kelola Iuran -->
+    <section class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-4 sm:p-5 shadow-lg shadow-black/30">
+      <h2 class="font-bold text-sm tracking-tight mb-3 flex items-center gap-2 border-l-2 border-emerald-500 pl-3">📋 Matriks Kelola Iuran <span class="text-slate-500 font-normal text-xs ml-1">(ketuk badge untuk ubah · ✏️ nominal kustom)</span></h2>
       <!-- Month filter + add month -->
       <div class="flex flex-wrap gap-1.5 items-center" id="chips"></div>
-      <div class="flex gap-1.5 mt-2 mb-3">
+      <div class="flex flex-wrap gap-1.5 mt-2.5 mb-3">
+        <label class="sr-only" for="newMonth">Tampilkan bulan baru</label>
         <input id="newMonth" type="month" min="2026-07"
-          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3 py-2 text-sm" />
-        <button id="btnAddMonth" class="text-xs px-3 py-2 rounded-xl border border-slate-700/70 bg-slate-800/60 hover:bg-slate-700/60">+ Tampilkan bulan</button>
+          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3 py-2 text-sm outline-none focus:border-emerald-500 transition-colors" />
+        <button id="btnAddMonth" class="text-xs px-3.5 py-2 rounded-xl border border-slate-700/70 bg-slate-800/60 hover:bg-slate-700/60 active:scale-95 transition-all">+ Tampilkan bulan</button>
       </div>
-      <div class="flex flex-wrap gap-1.5 mb-2">
-        <button id="pillAll" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">Semua Anggota (<span id="pillAllN">0</span>)</button>
-        <button id="pillUnpaid" class="px-2.5 py-1 rounded-full text-xs border bg-slate-800 border-slate-700 text-slate-400">🔴 Belum Lunas Bulan Ini (<span id="pillUnpaidN">0</span>)</button>
+      <div class="flex flex-wrap gap-1.5 mb-3">
+        <button id="pillAll" class="px-3 py-1.5 rounded-full text-xs font-medium border bg-slate-800 border-slate-700 text-slate-400 transition-all">Semua Anggota (<span id="pillAllN">0</span>)</button>
+        <button id="pillUnpaid" class="px-3 py-1.5 rounded-full text-xs font-medium border bg-slate-800 border-slate-700 text-slate-400 transition-all">🔴 Belum Lunas Bulan Ini (<span id="pillUnpaidN">0</span>)</button>
       </div>
-      <div class="scroll-x rounded-xl border border-slate-800/70">
+      <div class="scroll-x rounded-xl border border-slate-800/70 overflow-hidden">
         <table class="matrix w-full text-sm whitespace-nowrap">
-          <thead><tr id="mHead" class="bg-slate-800 text-slate-300 text-xs"></tr></thead>
+          <thead><tr id="mHead" class="bg-slate-800/90 text-slate-300 text-xs"></tr></thead>
           <tbody id="mBody"></tbody>
         </table>
       </div>
     </section>
-
-    <!-- 2. Target Dana & Donasi Sibagi -->
-    <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
-      <h2 class="font-semibold mb-3 text-sm border-l-2 border-amber-500 pl-2.5">🎯 Target Dana &amp; Donasi Sibagi</h2>
-      <form id="fGoal" class="grid gap-2">
-        <input id="goalTitleIn" placeholder="Nama/Judul Target (cth: Acara Makan Regu)" required
-          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-        <input id="goalTargetIn" type="number" min="1" step="1" placeholder="Target Nominal (Rp)" required
-          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-        <input id="goalUrlIn" type="url" placeholder="URL Sibagi (cth: https://sibagi.com/nama_akun)"
-          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-        <input id="goalExtIn" type="number" min="0" step="1" placeholder="Total Donasi Sibagi / Dana Luar (Rp)"
-          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-        <button class="bg-amber-500 hover:bg-amber-400 text-slate-900 rounded-xl py-2.5 text-sm font-bold">💾 Simpan Target &amp; Sibagi</button>
-        <p id="goalMsg" class="hidden text-xs"></p>
-      </form>
-    </section>
-
-    <!-- 3. Pencatatan Pengeluaran Kas -->
-    <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4 mb-4">
-      <h2 class="font-semibold mb-3 text-sm border-l-2 border-rose-500 pl-2.5">🧾 Pencatatan Pengeluaran Kas</h2>
-      <form id="fExp" class="grid gap-2 mb-3">
-        <input id="expDesc" placeholder="Deskripsi (cth: Beli konsumsi rapat)" required
-          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-        <div class="grid grid-cols-2 gap-2">
-          <input id="expAmt" type="number" min="1" step="1" placeholder="Nominal (Rp)" required
-            class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-          <input id="expDate" type="date" required
-            class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-slate-400 mb-1">📎 Foto Bukti / Nota (Opsional)</label>
-          <input type="file" id="expReceiptFile" accept="image/jpeg,image/png,image/webp"
-            class="block w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700">
-          <p id="expReceiptInfo" class="text-[10px] text-slate-500 mt-1 hidden"></p>
-        </div>
-        <button class="bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 text-sm font-semibold">+ Tambah pengeluaran</button>
-      </form>
-      <div id="expList" class="space-y-2"></div>
-    </section>
-
-    <!-- 4. Daftar & Tambah Anggota -->
-    <section class="rounded-2xl border border-slate-800/80 bg-slate-900/60 backdrop-blur-sm p-4">
-      <h2 class="font-semibold mb-3 text-sm border-l-2 border-sky-500 pl-2.5">👥 Daftar &amp; Tambah Anggota</h2>
-      <form id="fMem" class="flex gap-2 mb-3 items-center">
-        <input id="memName" placeholder="Nama anggota baru" required
-          class="flex-1 bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
-        <input id="memStartMonth" type="month" value="" min="2026-07"
-          class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3 py-2.5 text-sm text-slate-300 outline-none focus:border-emerald-500 w-[160px]"
-          title="Bulan wajib iuran mulai" />
-        <button class="bg-emerald-600 hover:bg-emerald-500 rounded-xl px-5 py-2.5 text-sm font-semibold">+ Tambah</button>
-      </form>
-      <div id="memList" class="flex flex-wrap gap-1.5"></div>
-    </section>
   </div>
 
   <!-- Custom nominal modal -->
-  <div id="payModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
-    <div class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 p-5">
-      <div id="payModalTitle" class="font-semibold text-sm mb-3">Setor Iuran</div>
-      <div class="flex flex-wrap gap-1.5 mb-2">
-        <button data-chip="10000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 10rb</button>
-        <button data-chip="20000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 20rb</button>
-        <button data-chip="50000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 50rb</button>
-        <button data-chip="100000" class="payChip px-2.5 py-1 rounded-full text-xs border border-slate-700 bg-slate-800 text-slate-300">Rp 100rb</button>
+  <div id="payModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-[2px]">
+    <div class="w-full max-w-sm rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/60 p-5 sm:p-6 relative overflow-hidden">
+      <div class="h-1 absolute top-0 inset-x-0 bg-gradient-to-r from-transparent via-emerald-500/70 to-transparent"></div>
+      <div id="payModalTitle" class="font-bold text-sm sm:text-base mb-3 tracking-tight">Setor Iuran</div>
+      <div class="flex flex-wrap gap-1.5 mb-3">
+        <button data-chip="10000" class="payChip px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700 bg-slate-800 text-slate-300">Rp 10rb</button>
+        <button data-chip="20000" class="payChip px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700 bg-slate-800 text-slate-300">Rp 20rb</button>
+        <button data-chip="50000" class="payChip px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700 bg-slate-800 text-slate-300">Rp 50rb</button>
+        <button data-chip="100000" class="payChip px-3 py-1.5 rounded-full text-xs font-medium border border-slate-700 bg-slate-800 text-slate-300">Rp 100rb</button>
       </div>
+      <label for="payAmt" class="sr-only">Nominal setoran</label>
       <input id="payAmt" type="number" min="1" step="1" inputmode="numeric" placeholder="Nominal (Rp)"
-        class="w-full bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
+        class="w-full bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-3 text-sm outline-none focus:border-emerald-500 transition-colors mb-1" />
       <p id="payModalErr" class="hidden text-rose-400 text-xs mt-1.5"></p>
       <div class="grid gap-2 mt-3">
-        <button id="btnSavePay" class="bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 text-sm font-bold">💾 Simpan Setoran</button>
-        <button id="btnClearPay" class="border border-rose-800/60 bg-rose-950/50 hover:bg-rose-900/50 text-rose-300 rounded-xl py-2 text-xs">Jadikan belum lunas</button>
-        <button id="btnCancelPay" class="text-slate-500 hover:text-slate-300 text-xs py-1">Batal</button>
+        <button id="btnSavePay" class="bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 active:scale-[.98] rounded-xl py-3 text-sm font-bold transition-all">💾 Simpan Setoran</button>
+        <button id="btnClearPay" class="border border-rose-800/60 bg-rose-950/50 hover:bg-rose-900/50 active:scale-[.98] text-rose-300 rounded-xl py-2.5 text-xs transition-all">Jadikan belum lunas</button>
+        <button id="btnCancelPay" class="text-slate-500 hover:text-slate-300 text-xs py-1.5 transition-colors">Batal</button>
       </div>
     </div>
   </div>
 
   <!-- Image report preview modal -->
-  <div id="imageModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
-    <div class="w-full max-w-md">
-      <div class="rounded-2xl border border-slate-700 bg-slate-900 p-4 flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <span class="font-semibold text-sm text-slate-200">📸 Preview Laporan</span>
-          <button id="btnCloseImage" class="text-slate-500 hover:text-slate-200 text-lg leading-none">&times;</button>
-        </div>
-        <canvas id="reportCanvas" class="w-full rounded-xl border border-slate-700" width="540" height="960"></canvas>
+  <div id="imageModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-[2px]">
+    <div class="w-full max-w-md rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/70 p-4 sm:p-5 flex flex-col gap-3 relative overflow-hidden">
+      <div class="h-1 absolute top-0 inset-x-0 bg-gradient-to-r from-transparent via-amber-500/70 to-transparent"></div>
+      <div class="flex items-center justify-between">
+        <span class="font-bold text-sm text-slate-200 tracking-tight">📸 Preview Laporan</span>
+        <button id="btnCloseImage" aria-label="Tutup" class="w-8 h-8 grid place-items-center rounded-full text-slate-500 hover:text-slate-200 hover:bg-slate-800/70 text-base transition-colors leading-none">&times;</button>
+      </div>
+      <canvas id="reportCanvas" class="w-full rounded-xl border border-slate-700/80 shadow-lg" width="540" height="960"></canvas>
+      <div>
+        <label for="reportMottoInput" class="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">💬 Motto / Catatan Footer</label>
         <div class="flex gap-2">
-          <button id="btnDownloadImg" class="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold py-2 rounded-xl">📥 Unduh PNG</button>
-          <button id="btnCopyImg" class="flex-1 bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs font-bold py-2 rounded-xl">📋 Salin Gambar</button>
+          <input type="text" id="reportMottoInput" class="flex-1 min-w-0 bg-slate-950/70 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors" placeholder="Satu Rasa, Satu Jiwa, Solid Regu 3!" />
+          <button type="button" id="btnRerenderMotto" title="Acak motto" class="shrink-0 w-9 rounded-lg bg-slate-800 hover:bg-slate-700 active:scale-95 text-sm border border-slate-700 transition-all">🎲</button>
         </div>
-        <div class="mb-1 px-1">
-          <label class="block text-xs font-semibold text-slate-400 mb-1">💬 Motto / Catatan Footer:</label>
-          <div class="flex gap-2">
-            <input type="text" id="reportMottoInput" class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500" placeholder="Satu Rasa, Satu Jiwa, Solid Regu 3!">
-            <button type="button" id="btnRerenderMotto" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition" title="Acak motto">🎲</button>
-          </div>
-        </div>
+      </div>
+      <div class="flex gap-2">
+        <button id="btnDownloadImg" class="flex-1 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 active:scale-[.98] text-white text-xs font-bold py-2.5 rounded-xl transition-all">📥 Unduh PNG</button>
+        <button id="btnCopyImg" class="flex-1 bg-slate-700 hover:bg-slate-600 active:scale-[.98] text-slate-200 text-xs font-bold py-2.5 rounded-xl transition-all">📋 Salin Gambar</button>
       </div>
     </div>
   </div>
 
   <!-- Nota / receipt preview modal -->
-  <div id="receiptModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85">
-    <div class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col max-h-[90vh]">
-      <div class="p-4 border-b border-slate-800">
-        <div id="rcvDesc" class="font-semibold text-sm text-slate-100 truncate">Nota Pengeluaran</div>
-        <div id="rcvMeta" class="text-xs text-slate-400 mt-0.5 tabular-nums"></div>
+  <div id="receiptModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85 backdrop-blur-[2px]">
+    <div class="w-full max-w-sm rounded-3xl border border-slate-700/80 bg-slate-900 shadow-2xl shadow-black/60 overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="flex items-start justify-between gap-3 p-4 border-b border-slate-800">
+        <div class="min-w-0">
+          <div id="rcvDesc" class="font-bold text-sm text-slate-100 truncate">Nota Pengeluaran</div>
+          <div id="rcvMeta" class="text-xs text-slate-400 mt-0.5 tabular-nums"></div>
+        </div>
       </div>
-      <div class="relative flex-1 min-h-0 bg-slate-950/60 flex items-center justify-center">
+      <div class="relative flex-1 min-h-0 bg-slate-950/60 flex items-center justify-center p-3">
         <div id="rcvSpinner" class="absolute w-8 h-8 border-2 border-slate-700 border-t-emerald-500 rounded-full animate-spin"></div>
-        <img id="rcvImg" alt="Bukti pengeluaran" class="max-h-[55vh] w-auto object-contain mx-auto rounded-lg opacity-0" />
+        <img id="rcvImg" alt="Bukti pengeluaran" class="max-h-[55vh] w-auto object-contain mx-auto rounded-lg opacity-0 shadow-lg" />
       </div>
-      <div class="p-3 flex items-center justify-between gap-2 border-t border-slate-800">
-        <a id="rcvFull" target="_blank" rel="noopener" class="text-xs font-medium text-emerald-400 hover:text-emerald-300 truncate px-2 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60">🔗 Buka Ukuran Penuh</a>
-        <button id="btnCloseReceipt" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 whitespace-nowrap">✕ Tutup</button>
+      <div class="p-3.5 flex items-center justify-between gap-2 border-t border-slate-800">
+        <a id="rcvFull" target="_blank" rel="noopener" class="text-xs font-medium text-emerald-400 hover:text-emerald-300 truncate px-2.5 py-2 rounded-lg border border-slate-700/70 bg-slate-800/60 transition-colors">🔗 Buka Ukuran Penuh</a>
+        <button id="btnCloseReceipt" class="px-3.5 py-2 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600 active:scale-95 text-slate-200 whitespace-nowrap transition-all">✕ Tutup</button>
       </div>
     </div>
   </div>
