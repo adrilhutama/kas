@@ -121,6 +121,12 @@
           <input id="expDate" type="date" required
             class="bg-slate-950/70 border border-slate-700/70 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-emerald-500" />
         </div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-400 mb-1">📎 Foto Bukti / Nota (Opsional)</label>
+          <input type="file" id="expReceiptFile" accept="image/jpeg,image/png,image/webp"
+            class="block w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-xs file:bg-slate-800 file:text-slate-300 hover:file:bg-slate-700">
+          <p id="expReceiptInfo" class="text-[10px] text-slate-500 mt-1 hidden"></p>
+        </div>
         <button class="bg-emerald-600 hover:bg-emerald-500 rounded-xl py-2.5 text-sm font-semibold">+ Tambah pengeluaran</button>
       </form>
       <div id="expList" class="space-y-2"></div>
@@ -182,6 +188,24 @@
             <button type="button" id="btnRerenderMotto" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition" title="Acak motto">🎲</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nota / receipt preview modal -->
+  <div id="receiptModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85">
+    <div class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="p-4 border-b border-slate-800">
+        <div id="rcvDesc" class="font-semibold text-sm text-slate-100 truncate">Nota Pengeluaran</div>
+        <div id="rcvMeta" class="text-xs text-slate-400 mt-0.5 tabular-nums"></div>
+      </div>
+      <div class="relative flex-1 min-h-0 bg-slate-950/60 flex items-center justify-center">
+        <div id="rcvSpinner" class="absolute w-8 h-8 border-2 border-slate-700 border-t-emerald-500 rounded-full animate-spin"></div>
+        <img id="rcvImg" alt="Bukti pengeluaran" class="max-h-[55vh] w-auto object-contain mx-auto rounded-lg opacity-0" />
+      </div>
+      <div class="p-3 flex items-center justify-between gap-2 border-t border-slate-800">
+        <a id="rcvFull" target="_blank" rel="noopener" class="text-xs font-medium text-emerald-400 hover:text-emerald-300 truncate px-2 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60">🔗 Buka Ukuran Penuh</a>
+        <button id="btnCloseReceipt" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 whitespace-nowrap">✕ Tutup</button>
       </div>
     </div>
   </div>
@@ -415,18 +439,31 @@ function render() {
   d.expenses.forEach(e => {
     const div = document.createElement('div');
     div.className = 'rounded-xl border border-slate-800/70 bg-slate-950/60 px-3.5 py-2 flex justify-between items-center gap-2';
-    div.innerHTML = `<div><div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500 tabular-nums">${tglID(e.expense_date)} &bull; ${rp(e.amount)}</div></div>`;
+    const info = document.createElement('div');
+    info.innerHTML = `<div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500 tabular-nums">${tglID(e.expense_date)} &bull; ${rp(e.amount)}</div>`;
+    const right = document.createElement('div');
+    right.className = 'flex items-center gap-1.5';
+    if (e.receipt_key) {
+      const rb = document.createElement('button');
+      rb.textContent = '🧾 Nota';
+      rb.title = 'Lihat bukti / nota pengeluaran';
+      rb.className = 'px-2 py-1 rounded-lg text-[11px] font-medium border border-emerald-800/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50';
+      rb.onclick = () => openReceipt(e);
+      right.appendChild(rb);
+    }
     const del = document.createElement('button');
     del.textContent = '🗑';
     del.className = 'px-2.5 py-1.5 rounded-xl bg-rose-950/60 border border-rose-800/60 text-sm';
     del.onclick = async () => {
-      if (!confirm(`Hapus pengeluaran "${e.description}" (${rp(e.amount)})?`)) return;
+      if (!confirm(`Hapus pengeluaran "${e.description}" (${rp(e.amount)})${e.receipt_key ? ' beserta foto notanya' : ''}?`)) return;
       const r = await fetch('/api/expenses/' + e.id, { method: 'DELETE', headers: auth() });
       if (r.status === 401) return logout();
       if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menghapus.'); }
       load();
     };
-    div.appendChild(del);
+    right.appendChild(del);
+    div.appendChild(info);
+    div.appendChild(right);
     ex.appendChild(div);
   });
 
@@ -608,20 +645,117 @@ document.getElementById('btnAddMonth').onclick = () => {
 document.getElementById('fExp').onsubmit = async e => {
   e.preventDefault();
   showErr(null);
+  const descEl = document.getElementById('expDesc');
+  const amtEl = document.getElementById('expAmt');
+  const dateEl = document.getElementById('expDate');
+  const fileInput = document.getElementById('expReceiptFile');
+  const info = document.getElementById('expReceiptInfo');
+
+  // 1) optional: compress + upload nota ke R2 dulu, ambil key-nya
+  let receiptKey = null;
+  const file = fileInput.files && fileInput.files[0];
+  if (file) {
+    info.classList.remove('hidden');
+    info.textContent = '📎 Mengunggah nota…';
+    try {
+      const blob = await compressImage(file);
+      receiptKey = await uploadReceipt(blob, blob.type || 'image/jpeg');
+      info.textContent = '✓ Nota terlampir (' + Math.round(blob.size / 1024) + ' KB)';
+      info.className = 'text-[10px] text-emerald-500 mt-1';
+      info.classList.remove('hidden');
+    } catch (err) {
+      info.textContent = 'Gagal unggah nota: ' + (err.message || err);
+      info.className = 'text-[10px] text-rose-500 mt-1';
+      info.classList.remove('hidden');
+      alert('Gagal mengunggah nota: ' + (err.message || err) + '\n\nKosongkan file jika ingin tetap simpan tanpa nota.');
+      return;
+    }
+  } else {
+    info.classList.add('hidden');
+  }
+
+  // 2) simpan pengeluaran (+receipt_key bila ada)
   const r = await fetch('/api/expenses', {
     method: 'POST', headers: auth(),
     body: JSON.stringify({
-      description: document.getElementById('expDesc').value.trim(),
-      amount: Number(document.getElementById('expAmt').value),
-      expense_date: document.getElementById('expDate').value
+      description: descEl.value.trim(),
+      amount: Number(amtEl.value),
+      expense_date: dateEl.value,
+      receipt_key: receiptKey || undefined
     })
   });
   if (r.status === 401) return logout();
   if (!r.ok) { const t = await r.json(); return showErr(t.error || 'Gagal menambah.'); }
-  document.getElementById('expDesc').value = '';
-  document.getElementById('expAmt').value = '';
+  descEl.value = '';
+  amtEl.value = '';
+  dateEl.value = new Date().toISOString().slice(0, 10);
+  fileInput.value = '';
+  info.classList.add('hidden');
   load();
 };
+
+// ---------- Receipt upload helpers ----------
+// Kompres gambar >800KB via canvas: max sisi 1600px, JPEG/WebP quality 0.82.
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const needsCompress = file.size > 800 * 1024;
+    if (!needsCompress) return resolve(file); // cukup kecil, kirim apa adanya
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const MAX = 1600;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > MAX || h > MAX) { const k = Math.min(MAX / w, MAX / h); w = Math.round(w * k); h = Math.round(h * k); }
+      const cv = document.createElement('canvas');
+      cv.width = w; cv.height = h;
+      const c2 = cv.getContext('2d');
+      c2.drawImage(img, 0, 0, w, h);
+      // PNG transparan tetap PNG (lossless), sisanya WebP/JPEG 0.82
+      const mime = file.type === 'image/png' ? 'image/png' : 'image/webp';
+      cv.toBlob(b => {
+        if (!b) return reject(new Error('Kompresi gagal.'));
+        const out = new Blob([b], { type: mime });
+        // kompresi gagal mengecil? pakai yang lebih kecil dari keduanya
+        resolve(out.size < file.size ? out : file);
+      }, mime, 0.82);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File bukan gambar yang valid.')); };
+    img.src = url;
+  });
+}
+
+async function uploadReceipt(blob, mime) {
+  const fd = new FormData();
+  fd.append('file', new File([blob], 'nota' + extOf(mime), { type: mime }));
+  const r = await fetch('/api/upload-receipt', { method: 'POST', headers: { 'Authorization': 'Bearer ' + TOKEN }, body: fd });
+  if (r.status === 401) return logout();
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'HTTP ' + r.status);
+  return j.key;
+}
+const extOf = m => m === 'image/webp' ? '.webp' : m === 'image/png' ? '.png' : '.jpg';
+
+// ---------- Receipt modal ----------
+function openReceipt(e) {
+  if (!e || !e.receipt_key) return;
+  const src = '/api/receipts/' + encodeURIComponent(e.receipt_key);
+  document.getElementById('rcvDesc').textContent = e.description;
+  document.getElementById('rcvMeta').textContent = rp(e.amount) + ' • ' + tglID(e.expense_date);
+  const img = document.getElementById('rcvImg');
+  img.style.display = 'block';
+  img.classList.add('opacity-0');
+  document.getElementById('rcvSpinner').classList.remove('hidden');
+  document.getElementById('rcvFull').href = src;
+  img.onload = () => { document.getElementById('rcvSpinner').classList.add('hidden'); img.classList.remove('opacity-0'); };
+  img.onerror = () => { document.getElementById('rcvSpinner').classList.add('hidden'); img.style.display = 'none'; };
+  img.src = src;
+  document.getElementById('receiptModal').classList.remove('hidden');
+}
+function closeReceipt() { document.getElementById('receiptModal').classList.add('hidden'); }
+document.getElementById('btnCloseReceipt').onclick = closeReceipt;
+document.getElementById('receiptModal').onclick = ev => { if (ev.target.id === 'receiptModal') closeReceipt(); };
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') closeReceipt(); });
 
 document.getElementById('fMem').onsubmit = async e => {
   e.preventDefault();

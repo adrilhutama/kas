@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS expenses (
   description TEXT NOT NULL,
   amount INTEGER NOT NULL,
   expense_date DATE NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  receipt_key TEXT DEFAULT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_payments_month ON payments(month_period);

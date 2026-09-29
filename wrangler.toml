@@ -13,6 +13,11 @@ database_name = "kas_regu_3"
 # TODO: replace with real ID from `wrangler d1 create kas_regu_3`
 database_id = "2fe5f0bd-7a71-4f24-9998-cb6cc7c749db"
 
+# Bucket foto bukti/nota pengeluaran (buat dulu di dashboard/CLI bila belum ada)
+[[r2_buckets]]
+binding = "RECEIPTS_BUCKET"
+bucket_name = "kas-receipts"
+
 # Admin password/token is a secret — do NOT put it here.
 # Set via dashboard or CLI:
 #   wrangler pages secret put ADMIN_KEY --project-name=kas-regu-3

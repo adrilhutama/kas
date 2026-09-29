@@ -150,6 +150,24 @@
       KAS REGU 3 &bull; <span id="upd"></span>
     </footer>
   </div>
+
+  <!-- Nota / receipt preview modal -->
+  <div id="receiptModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/85">
+    <div class="w-full max-w-sm rounded-2xl border border-slate-700 bg-slate-900 overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="p-4 border-b border-slate-800">
+        <div id="rcvDesc" class="font-semibold text-sm text-slate-100 truncate">Nota Pengeluaran</div>
+        <div id="rcvMeta" class="text-xs text-slate-400 mt-0.5 tabular-nums"></div>
+      </div>
+      <div class="relative flex-1 min-h-0 bg-slate-950/60 flex items-center justify-center">
+        <div id="rcvSpinner" class="absolute w-8 h-8 border-2 border-slate-700 border-t-emerald-500 rounded-full animate-spin"></div>
+        <img id="rcvImg" alt="Bukti pengeluaran" class="max-h-[55vh] w-auto object-contain mx-auto rounded-lg opacity-0" />
+      </div>
+      <div class="p-3 flex items-center justify-between gap-2 border-t border-slate-800">
+        <a id="rcvFull" target="_blank" rel="noopener" class="text-xs font-medium text-emerald-400 hover:text-emerald-300 truncate px-2 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60">🔗 Buka Ukuran Penuh</a>
+        <button id="btnCloseReceipt" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-700 hover:bg-slate-600 text-slate-200 whitespace-nowrap">✕ Tutup</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -363,11 +381,48 @@ function render(d) {
   }
   d.expenses.forEach(e => {
     const div = document.createElement('div');
-    div.className = 'rounded-2xl border border-slate-800/80 bg-slate-900/60 px-3.5 py-2.5 flex justify-between gap-2';
-    div.innerHTML = `<div><div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500">${tglID(e.expense_date)}</div></div><div class="font-bold tabular-nums text-rose-300 text-sm whitespace-nowrap">${rp(e.amount)}</div>`;
+    div.className = 'rounded-2xl border border-slate-800/80 bg-slate-900/60 px-3.5 py-2.5 flex justify-between gap-2 items-center';
+    const left = document.createElement('div');
+    left.innerHTML = `<div class="text-sm">${e.description}</div><div class="text-[11px] text-slate-500">${tglID(e.expense_date)}</div>`;
+    const right = document.createElement('div');
+    right.className = 'flex items-center gap-2 shrink-0';
+    if (e.receipt_key) {
+      const rb = document.createElement('button');
+      rb.textContent = '🧾 Nota';
+      rb.title = 'Lihat bukti / nota pengeluaran';
+      rb.className = 'px-2 py-1 rounded-lg text-[11px] font-medium border border-emerald-800/60 bg-emerald-950/40 text-emerald-300 hover:bg-emerald-900/50';
+      rb.onclick = () => openReceipt(e);
+      right.appendChild(rb);
+    }
+    const amt = document.createElement('div');
+    amt.className = 'font-bold tabular-nums text-rose-300 text-sm whitespace-nowrap';
+    amt.textContent = rp(e.amount);
+    right.appendChild(amt);
+    div.appendChild(left);
+    div.appendChild(right);
     ex.appendChild(div);
   });
 }
+
+// ---------- Nota preview modal ----------
+function openReceipt(e) {
+  if (!e || !e.receipt_key) return;
+  const src = '/api/receipts/' + encodeURIComponent(e.receipt_key);
+  document.getElementById('rcvDesc').textContent = e.description;
+  document.getElementById('rcvMeta').textContent = rp(e.amount) + ' • ' + tglID(e.expense_date);
+  const img = document.getElementById('rcvImg');
+  img.style.display = 'block';
+  img.classList.add('opacity-0');
+  document.getElementById('rcvSpinner').classList.remove('hidden');
+  document.getElementById('rcvFull').href = src;
+  img.onload = () => { document.getElementById('rcvSpinner').classList.add('hidden'); img.classList.remove('opacity-0'); };
+  img.onerror = () => { document.getElementById('rcvSpinner').classList.add('hidden'); img.style.display = 'none'; };
+  img.src = src;
+  document.getElementById('receiptModal').classList.remove('hidden');
+}
+document.getElementById('btnCloseReceipt').onclick = () => document.getElementById('receiptModal').classList.add('hidden');
+document.getElementById('receiptModal').onclick = ev => { if (ev.target.id === 'receiptModal') document.getElementById('receiptModal').classList.add('hidden'); };
+document.addEventListener('keydown', ev => { if (ev.key === 'Escape') document.getElementById('receiptModal').classList.add('hidden'); });
 
 load();
 

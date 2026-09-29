@@ -124,7 +124,7 @@ async function getSummary(url, env) {
   });
 
   const expRes = await env.DB.prepare(
-    "SELECT id, description, amount, expense_date FROM expenses ORDER BY expense_date DESC, id DESC"
+    "SELECT id, description, amount, expense_date, receipt_key FROM expenses ORDER BY expense_date DESC, id DESC"
   ).all();
 
   // Per-month income for small stat row (sums actual amounts incl. custom nominal)
@@ -169,6 +169,20 @@ export async function onRequest(context) {
       return json({ members: res.results || [] });
     }
 
+    // --- Public: receipt image (R2), agar anggota bisa lihat nota tanpa login ---
+    // GET /api/receipts/<key>  dengan key berformat "receipts/xxx.jpg"
+    if (method === "GET" && path.startsWith("receipts")) {
+      const rawKey = decodeURIComponent(path.slice("receipts".length + 1));
+      if (!env.RECEIPTS_BUCKET) return json({ error: "Bucket R2 belum dikonfigurasi." }, 500);
+      const object = await env.RECEIPTS_BUCKET.get(rawKey);
+      if (!object) return json({ error: "Gambar tidak ditemukan." }, 404);
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set("etag", object.httpEtag);
+      headers.set("Cache-Control", "public, max-age=31536000, immutable");
+      return new Response(object.body, { headers });
+    }
+
     // --- Auth: login ---
     if (method === "POST" && path === "auth/login") {
       let body = {};
@@ -190,7 +204,8 @@ export async function onRequest(context) {
       (method === "POST" && path === "members") ||
       (method === "DELETE" && path.startsWith("members/")) ||
       (method === "POST" && path === "goal/update") ||
-      (method === "PATCH" && path.startsWith("members/"));
+      (method === "PATCH" && path.startsWith("members/")) ||
+      (method === "POST" && path === "upload-receipt");
 
     if (needsAuth && !isAdmin(request, env)) {
       return json({ error: "Unauthorized." }, 401);
@@ -245,7 +260,7 @@ export async function onRequest(context) {
       return json({ ok: true, member_id, month_period, status, amount: status ? amount : 0 });
     }
 
-    // --- Add expense ---
+    // --- Add expense (with optional receipt_key) ---
     if (method === "POST" && path === "expenses") {
       let body = {};
       try {
@@ -256,28 +271,81 @@ export async function onRequest(context) {
       const description = String(body.description || "").trim();
       const amount = Number(body.amount);
       const expense_date = String(body.expense_date || "");
+      const receipt_key = typeof body.receipt_key === "string" ? body.receipt_key.trim() : null;
 
       if (!description) return json({ error: "Deskripsi wajib diisi." }, 400);
       if (!Number.isInteger(amount) || amount <= 0)
         return json({ error: "Nominal harus angka > 0." }, 400);
       if (!DATE_RE.test(expense_date))
         return json({ error: "expense_date harus format YYYY-MM-DD." }, 400);
+      if (receipt_key && !/^receipts\/[\w.-]+$/.test(receipt_key))
+        return json({ error: "Format receipt_key tidak valid." }, 400);
 
       const res = await env.DB.prepare(
-        "INSERT INTO expenses (description, amount, expense_date) VALUES (?, ?, ?)"
+        "INSERT INTO expenses (description, amount, expense_date, receipt_key) VALUES (?, ?, ?, ?)"
       )
-        .bind(description, amount, expense_date)
+        .bind(description, amount, expense_date, receipt_key)
         .run();
       return json({ ok: true, id: res.meta?.last_row_id ?? null });
     }
 
-    // --- Delete expense ---
+    // --- Delete expense (hapus juga file nota di R2 bila ada) ---
     if (method === "DELETE" && path.startsWith("expenses/")) {
       const id = Number(path.split("/")[1]);
       if (!Number.isInteger(id) || id <= 0)
         return json({ error: "ID tidak valid." }, 400);
+      const row = await env.DB.prepare("SELECT receipt_key FROM expenses WHERE id = ?")
+        .bind(id).first();
+      if (row?.receipt_key && env.RECEIPTS_BUCKET) {
+        try {
+          await env.RECEIPTS_BUCKET.delete(row.receipt_key);
+        } catch {}
+      }
       await env.DB.prepare("DELETE FROM expenses WHERE id = ?").bind(id).run();
       return json({ ok: true, id });
+    }
+
+    // --- Upload receipt image to R2 (admin only) ---
+    // POST /api/upload-receipt  — multipart/form-data (field "file"/"receipt") atau raw binary body
+    if (method === "POST" && path === "upload-receipt") {
+      if (!env.RECEIPTS_BUCKET) return json({ error: "Bucket R2 belum dikonfigurasi." }, 500);
+      const ct = request.headers.get("Content-Type") || "";
+      const MAX_SIZE = 5 * 1024 * 1024; // 5 MB
+      let buf;
+      let mime = "";
+
+      if (ct.toLowerCase().includes("multipart/form-data")) {
+        const form = await request.formData();
+        const f = form.get("file") || form.get("receipt");
+        if (!f || !(f instanceof File)) return json({ error: "Lampirkan file (field 'file' atau 'receipt')." }, 400);
+        mime = f.type || "";
+        if (f.size > MAX_SIZE) return json({ error: "Ukuran file melebihi 5 MB." }, 400);
+        buf = new Uint8Array(await f.arrayBuffer());
+      } else {
+        buf = new Uint8Array(await request.arrayBuffer());
+        if (!buf.length) return json({ error: "Body kosong." }, 400);
+        if (buf.length > MAX_SIZE) return json({ error: "Ukuran file melebihi 5 MB." }, 400);
+        // Terka ekstensi dari nama file bila ada (opsional "filename" param tidak dikirim di raw body)
+      }
+
+      const extByMime = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+      };
+      // Validasi MIME — terdeteksi dari multipart; raw body pakai heuristik header magic bytes
+      if (!mime) {
+        if (buf[0] === 0xff && buf[1] === 0xd8) mime = "image/jpeg";
+        else if (buf[0] === 0x89 && buf[1] === 0x50) mime = "image/png";
+        else if (buf.length > 11 && buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46) mime = "image/webp";
+        else return json({ error: "Format gambar tidak dikenali (hanya JPEG/PNG/WebP)." }, 400);
+      }
+      const ext = extByMime[mime];
+      if (!ext) return json({ error: "Tipe gambar hanya image/jpeg, image/png, image/webp." }, 400);
+
+      const key = `receipts/${Date.now()}-${crypto.randomUUID().slice(0, 8)}${ext}`;
+      await env.RECEIPTS_BUCKET.put(key, buf, { httpMetadata: { contentType: mime } });
+      return json({ success: true, key });
     }
 
     // --- Add member / toggle active ---
