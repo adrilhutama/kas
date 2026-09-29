@@ -48,6 +48,18 @@
     transition: transform .12s ease, border-color .15s ease, background-color .15s ease, color .15s ease;
   }
   #chips > button:active, #pillAll:active, #pillUnpaid:active { transform: scale(.95); }
+  /* Stat card values: keep nominal compact & single-line on narrow screens.
+     #stBalance is re-classed by render(); id-scoped rules win over those utilities. */
+  #stIncome, #stExpense, #stBalance { white-space: nowrap; letter-spacing: -.01em; }
+  @media (max-width: 639px)   { #stIncome, #stExpense, #stBalance { font-size: .75rem; } }
+  @media (min-width: 640px)   { #stIncome, #stExpense, #stBalance { font-size: .875rem; } }
+  @media (min-width: 768px)   { #stIncome, #stExpense, #stBalance { font-size: 1rem; } }
+  /* hide horizontal pill scrollbars (swipe-friendly, no visual track) */
+  .no-scrollbar { scrollbar-width: none; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  /* keep swiped pill rows single-line; items are generated in JS so target them here */
+  #chips > button { flex-shrink: 0; white-space: nowrap; }
+  #perMonth > span { flex-shrink: 0; white-space: nowrap; }
 </style>
 </head>
 <body class="text-slate-100 min-h-screen antialiased">
@@ -79,18 +91,18 @@
 
   <div id="app" class="hidden space-y-5">
     <!-- Stat cards -->
-    <section class="grid grid-cols-3 gap-2 sm:gap-3">
-      <div class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-3 sm:p-4 shadow-lg shadow-black/30 transition-transform hover:-translate-y-px">
+    <section class="grid grid-cols-3 gap-1.5 sm:gap-3">
+      <div class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-2.5 sm:p-4 shadow-lg shadow-black/30 transition-transform hover:-translate-y-px">
         <div class="flex items-center gap-1.5 text-[11px] text-slate-400 uppercase tracking-wide"><span class="text-emerald-400">↗</span> Masuk</div>
-        <div id="stIncome" class="mt-1 font-bold tabular-nums text-emerald-300 text-base sm:text-xl truncate" title="Total pemasukan seluruh periode">-</div>
+        <div id="stIncome" class="mt-1 font-extrabold tabular-nums text-emerald-300 text-xs sm:text-sm md:text-base tracking-tight whitespace-nowrap" title="Total pemasukan seluruh periode">-</div>
       </div>
-      <div class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-3 sm:p-4 shadow-lg shadow-black/30 transition-transform hover:-translate-y-px">
+      <div class="rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-2.5 sm:p-4 shadow-lg shadow-black/30 transition-transform hover:-translate-y-px">
         <div class="flex items-center gap-1.5 text-[11px] text-slate-400 uppercase tracking-wide"><span class="text-rose-400">↘</span> Keluar</div>
-        <div id="stExpense" class="mt-1 font-bold tabular-nums text-rose-300 text-base sm:text-xl truncate" title="Total pengeluaran seluruh periode">-</div>
+        <div id="stExpense" class="mt-1 font-extrabold tabular-nums text-rose-300 text-xs sm:text-sm md:text-base tracking-tight whitespace-nowrap" title="Total pengeluaran seluruh periode">-</div>
       </div>
-      <div class="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-slate-900 to-slate-950/90 backdrop-blur p-3 sm:p-4 shadow-lg shadow-amber-950/40 transition-transform hover:-translate-y-px">
+      <div class="rounded-2xl border border-amber-500/25 bg-gradient-to-br from-slate-900 to-slate-950/90 backdrop-blur p-2.5 sm:p-4 shadow-lg shadow-amber-950/40 transition-transform hover:-translate-y-px">
         <div class="flex items-center gap-1.5 text-[11px] text-amber-300/80 uppercase tracking-wide"><span>◉</span> Saldo</div>
-        <div id="stBalance" class="mt-1 font-black tabular-nums text-amber-300 text-base sm:text-xl truncate" title="Saldo kas saat ini">-</div>
+        <div id="stBalance" class="mt-1 font-extrabold tabular-nums text-amber-300 text-xs sm:text-sm md:text-base tracking-tight whitespace-nowrap" title="Saldo kas saat ini">-</div>
       </div>
     </section>
 
@@ -115,11 +127,11 @@
     <!-- Month filter -->
     <section>
       <div class="text-[11px] uppercase tracking-wide text-slate-500 mb-2">Periode ditampilkan</div>
-      <div id="chips" class="flex flex-wrap gap-1.5"></div>
+      <div id="chips" class="flex items-center gap-1.5 overflow-x-auto pb-1.5 text-xs no-scrollbar"></div>
     </section>
 
     <!-- Per-month mini stats -->
-    <section id="perMonth" class="flex flex-wrap gap-1.5 text-xs"></section>
+    <section id="perMonth" class="flex items-center gap-1.5 overflow-x-auto pb-1.5 text-xs no-scrollbar"></section>
 
     <!-- Savings goal -->
     <section id="goalCard" class="hidden rounded-2xl border border-slate-800/80 bg-slate-900/80 backdrop-blur p-4 sm:p-5 shadow-lg shadow-black/30">
