@@ -1,0 +1,25 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "C:/Security Data/Documents/REPORT SECURITY/Michael/Cash"]
+    },
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "TaskCreate|TaskUpdate|TaskGet|TaskList|TaskStop|EnterPlanMode|ExitPlanMode|ExitWorktree",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo \"Task/plan-mode tool usage: ensure you're following Ultracode guidance before proceeding.\""
+          }
+        ]
+      }
+    ]
+  }
+}
