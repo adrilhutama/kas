@@ -45,9 +45,56 @@
   input:focus-visible, select:focus-visible, button:focus-visible, summary:focus-visible {
     outline: 2px solid rgb(16 185 129 / .5); outline-offset: 1px;
   }
+  /* Toast notification system */
+  #toastContainer {
+    position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 100;
+    display: flex; flex-direction: column; gap: 0.5rem; align-items: flex-end;
+    pointer-events: none;
+  }
+  .toast {
+    pointer-events: auto;
+    display: flex; align-items: center; gap: 0.75rem;
+    padding: 0.75rem 1rem; border-radius: 0.75rem;
+    background: rgb(15 23 42 / 0.95); backdrop-blur-md;
+    border: 1px solid rgb(51 65 85 / 0.8);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(0 0 0 / 0.2);
+    color: rgb(226 232 240); font-size: 0.8125rem; font-weight: 500;
+    max-width: 20rem; min-width: 10rem;
+    transform: translateX(110%); opacity: 0;
+    transition: transform 0.25s cubic-bezier(.2,.9,.3,1.2), opacity 0.2s ease;
+  }
+  .toast.toast-enter { transform: translateX(0); opacity: 1; }
+  .toast.toast-exit { transform: translateX(110%); opacity: 0; }
+  .toast-icon { flex-shrink: 0; width: 1.25rem; height: 1.25rem; }
+  .toast-body { flex: 1 min-w-0; }
+  .toast-title { font-weight: 600; margin-bottom: 0.125rem; }
+  .toast-close {
+    flex-shrink: 0; width: 1.5rem; height: 1.5rem;
+    grid place-items: center; border-radius: 0.375rem;
+    background: transparent; border: none; cursor: pointer;
+    color: rgb(148 163 184); transition: background 0.15s, color 0.15s;
+  }
+  .toast-close:hover { background: rgb(51 65 85 / 0.6); color: rgb(226 232 240); }
+  .toast-success { border-color: rgb(16 185 129 / 0.4); }
+  .toast-success .toast-icon { color: rgb(52 211 153); }
+  .toast-error { border-color: rgb(244 63 94 / 0.4); }
+  .toast-error .toast-icon { color: rgb(251 113 133); }
+  .toast-info { border-color: rgb(56 189 248 / 0.4); }
+  .toast-info .toast-icon { color: rgb(56 189 248); }
+  .toast-warning { border-color: rgb(245 158 11 / 0.4); }
+  .toast-warning .toast-icon { color: rgb(251 191 36); }
+  /* Progress bar for auto-dismiss */
+  .toast-progress {
+    position: absolute; bottom: 0; left: 0; height: 2px;
+    background: currentColor; opacity: 0.4;
+    transform-origin: left; transform: scaleX(1);
+    transition: transform linear;
+  }
 </style>
 </head>
 <body class="text-slate-100 min-h-screen antialiased">
+<!-- Toast container -->
+<div id="toastContainer" aria-live="polite" aria-atomic="true"></div>
 <!-- ambient glow -->
 <div class="pointer-events-none fixed inset-x-0 top-0 h-72 bg-gradient-to-b from-emerald-950/40 via-slate-950/30 to-transparent"></div>
 
@@ -316,6 +363,58 @@ async function copyText(text, btn, doneLabel) {
     }
   }
   return ok;
+}
+
+// ---------- Toast notification system ----------
+let _toastId = 0;
+function toast(msg, type = 'info', duration = 4000) {
+  const container = document.getElementById('toastContainer');
+  if (!container) return;
+  const id = ++_toastId;
+  const icons = {
+    success: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>',
+    error: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>',
+    info: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+    warning: '<svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>',
+  };
+  const title = { success: 'Berhasil', error: 'Gagal', info: 'Info', warning: 'Peringatan' };
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.id = `toast-${id}`;
+  el.innerHTML = `
+    <span class="toast-icon">${icons[type] || icons.info}</span>
+    <div class="toast-body">
+      <div class="toast-title">${title[type] || type}</div>
+      <div>${msg}</div>
+    </div>
+    <button class="toast-close" aria-label="Tutup" onclick="dismissToast(${id})">&times;</button>
+    <div class="toast-progress" id="progress-${id}"></div>
+  `;
+  container.appendChild(el);
+  // Animate in
+  requestAnimationFrame(() => {
+    el.classList.add('toast-enter');
+    el.classList.remove('toast-exit');
+  });
+  // Progress bar animation
+  const progress = document.getElementById(`progress-${id}`);
+  if (progress && duration > 0) {
+    progress.style.transition = `transform ${duration}ms linear`;
+    requestAnimationFrame(() => {
+      progress.style.transform = 'scaleX(0)';
+    });
+  }
+  // Auto dismiss
+  if (duration > 0) {
+    setTimeout(() => dismissToast(id), duration);
+  }
+}
+function dismissToast(id) {
+  const el = document.getElementById(`toast-${id}`);
+  if (!el) return;
+  el.classList.remove('toast-enter');
+  el.classList.add('toast-exit');
+  setTimeout(() => el.remove(), 250);
 }
 
 function buildWAText() {
@@ -725,7 +824,7 @@ document.getElementById('fExp').onsubmit = async e => {
       info.textContent = 'Gagal unggah nota: ' + (err.message || err);
       info.className = 'text-[10px] text-rose-500 mt-1';
       info.classList.remove('hidden');
-      alert('Gagal mengunggah nota: ' + (err.message || err) + '\n\nKosongkan file jika ingin tetap simpan tanpa nota.');
+      toast('Gagal mengunggah nota: ' + (err.message || err), 'error');
       return;
     }
   } else {
@@ -1229,7 +1328,7 @@ function generateReportCanvas(d, canvas) {
 
 // Wire up handlers
 document.getElementById('btnGenImage').onclick = () => {
-  if (!DATA) return alert('Tunggu data termuat.');
+  if (!DATA) return toast('Data kas belum termuat. Tunggu sebentar...', 'warning');
   const pc = document.getElementById('reportCanvas');
   pc.width = 1080;
   pc.height = 1920;
