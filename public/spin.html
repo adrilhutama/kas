@@ -117,6 +117,17 @@
     transform-origin: left; transform: scaleX(1);
     transition: transform linear;
   }
+  /* Skeleton loading animation */
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+  .skeleton {
+    background: linear-gradient(90deg, rgb(30 41 59) 25%, rgb(51 65 85) 50%, rgb(30 41 59) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s ease-in-out infinite;
+    border-radius: 0.375rem;
+  }
 </style>
 </head>
 <body class="bg-slate-950 text-slate-100 min-h-screen">
